@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Critter Heaven Bot — Optimal solver for the Tap Titans 2 block-matching puzzle minigame. Upload a screenshot or build your grid manually, and find the minimum taps to clear.">
+  <meta name="description"
+    content="Critter Heaven Bot — Optimal solver for the Tap Titans 2 block-matching puzzle minigame. Upload a screenshot or build your grid manually, and find the minimum taps to clear.">
   <title>Critter Heaven Bot — TT2 Puzzle Solver</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
   <div class="app-container">
 
@@ -14,6 +17,9 @@
     <header>
       <h1>🐾 Critter Heaven Bot</h1>
       <p class="subtitle">Optimal solver for the TT2 block-matching puzzle</p>
+      <div style="margin-top: 12px;">
+        <button id="btn-tutorial" class="btn btn-outline btn-sm">Tutorial</button>
+      </div>
     </header>
 
     <!-- Main Layout -->
@@ -178,6 +184,44 @@
 
   </div>
 
+  <!-- Tutorial Modal -->
+  <div id="tutorial-modal" class="modal-overlay">
+    <div class="modal-content card">
+      <h2 class="card-title">📖 How to Use</h2>
+      <div class="modal-body">
+        <p><strong>Option 1: Image Recognition</strong></p>
+        <ul>
+          <li>Take a screenshot of the Critter Heaven grid in Tap Titans 2.</li>
+          <li>Go to the <strong>Image</strong> tab and upload the screenshot.</li>
+          <li>Crop the image so only the grid blocks are visible (no borders or scores).</li>
+          <li>Click <strong>Detect Grid</strong>.</li>
+        </ul>
+        <p><strong>Option 2: Manual Input</strong></p>
+        <ul>
+          <li>Go to the <strong>Manual</strong> tab.</li>
+          <li>Select the grid size (rows and columns).</li>
+          <li>Select a block from the palette and click on the grid cells to recreate the board.</li>
+        </ul>
+        <p><strong>Solving</strong></p>
+        <ul>
+          <li>Adjust the time limit (more time = better chance to find the perfect minimum-tap solution).</li>
+          <li>Click <strong>Solve Grid</strong>.</li>
+          <li>Use the playback controls (▶, ⏪, ⏩) to see the step-by-step solution.</li>
+        </ul>
+      </div>
+      <button id="btn-close-tutorial" class="btn btn-primary btn-block" style="margin-top: 16px;">Got it!</button>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="github-toast" class="toast">
+    <p>⭐ Like this project? Star it on GitHub or report bugs!</p>
+    <div class="toast-actions">
+      <a href="https://github.com/Jokskuyy/tap-titan-critter-heaven" target="_blank" class="btn btn-sm btn-primary">Go to GitHub</a>
+      <button id="btn-close-toast" class="btn btn-sm btn-outline">Dismiss</button>
+    </div>
+  </div>
+
   <script src="js/grid-engine.js"></script>
   <script src="js/image-processor.js"></script>
   <script>
@@ -229,10 +273,10 @@
       // Template matching state
       let templates = [];
       const TEMPLATE_FILES = [
-        'TT2_Beet', 'TT2_Bone', 'TT2_BowTie', 'TT2_CandyCane', 'TT2_CatFood', 'TT2_Cherry', 
-        'TT2_Emerald', 'TT2_EyeGlass', 'TT2_Grape', 'TT2_GreenFlower', 'TT2_HoneyComb', 'TT2_Leaf', 
-        'TT2_Mushroom', 'TT2_Onion', 'TT2_Oranges', 'TT2_Pear', 'TT2_Pepper', 'TT2_PurpleFlower', 
-        'TT2_RedTie', 'TT2_Starfish', 'TT2_Tennis', 'TT2_Walnut', 'TT2_Yarn'
+        'TT2_Beet', 'TT2_Bone', 'TT2_BowTie', 'TT2_CandyCane', 'TT2_CatFood', 'TT2_Cherry',
+        'TT2_Emerald', 'TT2_EyeGlass', 'TT2_Grape', 'TT2_GreenFlower', 'TT2_HoneyComb', 'TT2_Leaf',
+        'TT2_Mushroom', 'TT2_Onion', 'TT2_Oranges', 'TT2_Pear', 'TT2_Pepper', 'TT2_PurpleFlower',
+        'TT2_RedTie', 'TT2_Starfish', 'TT2_Tennis', 'TT2_Walnut', 'TT2_Yarn', 'TT2_Rambutan'
       ];
 
       // ---- DOM Refs ----
@@ -256,8 +300,28 @@
         setupCrop();
         setupSolver();
         setupPlayback();
+        setupUI();
         renderGrid();
         loadTemplates();
+      }
+
+      function setupUI() {
+        // Tutorial Modal
+        const modal = $('tutorial-modal');
+        $('btn-tutorial').addEventListener('click', () => modal.classList.add('active'));
+        $('btn-close-tutorial').addEventListener('click', () => modal.classList.remove('active'));
+
+        // Toast
+        setTimeout(() => {
+          if (!localStorage.getItem('hideGithubToast')) {
+            $('github-toast').classList.add('active');
+          }
+        }, 3000);
+
+        $('btn-close-toast').addEventListener('click', () => {
+          $('github-toast').classList.remove('active');
+          localStorage.setItem('hideGithubToast', 'true');
+        });
       }
 
       // ---- Template Loading ----
@@ -483,9 +547,9 @@
             } else {
               // Block — try drawing template image
               const tpl = activeTemplateMap[type];
-              
+
               gridCtx.save();
-              
+
               // Highlight styling: dim others, glow target
               if (highlightCells && highlightCells.length > 0) {
                 if (!isHighlighted) {
@@ -540,7 +604,7 @@
                   gridCtx.moveTo(x + cellSize / 2, y - 5);
                   gridCtx.lineTo(x + cellSize / 2, y + cellSize + 5);
                   gridCtx.stroke();
-                  
+
                   // Center dot
                   gridCtx.fillStyle = '#ffffff';
                   gridCtx.beginPath();
@@ -998,7 +1062,7 @@
             return;
           }
           goToStep(currentStep + 1);
-        }, 800);
+        }, 1500);
       }
 
       function stopAutoplay() {
@@ -1022,4 +1086,5 @@
     })();
   </script>
 </body>
+
 </html>
