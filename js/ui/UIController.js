@@ -371,6 +371,11 @@ export class UIController {
       result.usedTemplates.forEach((t, i) => {
         this.state.activeTemplateMap[i + 1] = t;
       });
+      // Fill the rest of the activeTemplateMap with unused templates so they show as images instead of numbers
+      const unusedTemplates = this.state.templates.filter(t => !result.usedTemplates.includes(t));
+      unusedTemplates.forEach((t, i) => {
+        this.state.activeTemplateMap[result.usedTemplates.length + 1 + i] = t;
+      });
 
       $('input-rows').value = rows;
       $('input-cols').value = cols;
