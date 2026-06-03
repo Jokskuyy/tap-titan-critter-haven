@@ -45,7 +45,7 @@ export class UIController {
 
     const fileList = TEMPLATE_FILES.map(name => ({
       url: `imgs/${name}.png`,
-      name: name.replace('TT2_', '')
+      name: name.replace('Pet', 'Pet ').replace('Item', '')
     }));
 
     // Skeleton loader
@@ -160,7 +160,7 @@ export class UIController {
   buildManualGrid() {
     this.state.gridRows = parseInt($('input-rows').value) || 7;
     this.state.gridCols = parseInt($('input-cols').value) || 7;
-    this.state.numTypes = 24; // Always 24 types available in palette
+    this.state.numTypes = TEMPLATE_FILES.length; // Always match template file count
     this.state.grid = GridEngine.createGrid(this.state.gridRows, this.state.gridCols);
     this.state.originalGrid = GridEngine.cloneGrid(this.state.grid);
     this.state.selectedType = 1;

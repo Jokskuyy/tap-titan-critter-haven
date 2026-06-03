@@ -17,20 +17,26 @@ export const BLOCK_COLORS = [
   '#0ea5e9', // 15 (Sky)
   '#eab308', // 16 (Yellow)
   '#22c55e', // 17 (Green)
-  '#f472b6', // 18 (Light Pink)
+  '#f472b6', // 18 (Pink Light)
   '#fb7185', // 19 (Rose Light)
   '#38bdf8', // 20 (Sky Light)
   '#818cf8', // 21 (Indigo Light)
   '#34d399', // 22 (Emerald Light)
   '#fb923c', // 23 (Orange Light)
   '#a78bfa', // 24 (Violet Light)
+  '#c084fc', // 25 (Purple Light)
+  '#2dd4bf', // 26 (Teal Light)
+  '#a3e635', // 27 (Lime Light)
+  '#fda4af', // 28 (Rose Pink)
+  '#93c5fd', // 29 (Blue Light)
+  '#fde047', // 30 (Yellow Light)
 ];
 
 export const TEMPLATE_FILES = [
-  'TT2_Beet', 'TT2_Bone', 'TT2_BowTie', 'TT2_CandyCane', 'TT2_CatFood', 'TT2_Cherry', 
-  'TT2_Emerald', 'TT2_EyeGlass', 'TT2_Grape', 'TT2_GreenFlower', 'TT2_HoneyComb', 'TT2_Leaf', 
-  'TT2_Mushroom', 'TT2_Onion', 'TT2_Oranges', 'TT2_Pear', 'TT2_Pepper', 'TT2_PurpleFlower', 
-  'TT2_RedTie', 'TT2_Starfish', 'TT2_Tennis', 'TT2_Walnut', 'TT2_Yarn', 'TT2_Rambutan'
+  'Pet1Item', 'Pet2Item', 'Pet3Item', 'Pet4Item', 'Pet5Item', 'Pet6Item', 'Pet7Item', 'Pet8Item',
+  'Pet9Item', 'Pet10Item', 'Pet11Item', 'Pet12Item', 'Pet13Item', 'Pet14Item', 'Pet15Item', 'Pet16Item',
+  'Pet17Item', 'Pet18Item', 'Pet19Item', 'Pet20Item', 'Pet21Item', 'Pet22Item', 'Pet23Item', 'Pet24Item',
+  'Pet25Item', 'Pet26Item', 'Pet27Item', 'Pet28Item', 'Pet29Item', 'Pet30Item'
 ];
 
 export class AppState {
