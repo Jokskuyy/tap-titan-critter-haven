@@ -877,6 +877,8 @@ header .subtitle {
 .modal-content {
   width: 90%;
   max-width: 500px;
+  max-height: 85vh;
+  overflow-y: auto;
   transform: translateY(20px);
   transition: all var(--transition-normal);
 }
