@@ -152,16 +152,16 @@ const ImageProcessor = (() => {
    * fileList: array of { url, name } objects
    */
   async function loadTemplates(fileList, targetSize = 32) {
-    const templates = [];
-    for (const file of fileList) {
+    const promises = fileList.map(async (file) => {
       try {
-        const template = await prepareTemplate(file.url, file.name, targetSize);
-        templates.push(template);
+        return await prepareTemplate(file.url, file.name, targetSize);
       } catch (err) {
         console.warn(`Failed to load template: ${file.name}`, err);
+        return null;
       }
-    }
-    return templates;
+    });
+    const results = await Promise.all(promises);
+    return results.filter(r => r !== null);
   }
 
   /**

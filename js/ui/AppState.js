@@ -1,15 +1,29 @@
 export const BLOCK_COLORS = [
   null, // 0 = empty
-  '#f59e0b', // 1
-  '#ef4444', // 2
-  '#3b82f6', // 3
-  '#f97316', // 4
-  '#10b981', // 5
-  '#8b5cf6', // 6
-  '#ec4899', // 7
-  '#06b6d4', // 8
-  '#84cc16', // 9
-  '#f43f5e', // 10
+  '#f59e0b', // 1 (Amber)
+  '#ef4444', // 2 (Red)
+  '#3b82f6', // 3 (Blue)
+  '#f97316', // 4 (Orange)
+  '#10b981', // 5 (Emerald)
+  '#8b5cf6', // 6 (Violet)
+  '#ec4899', // 7 (Pink)
+  '#06b6d4', // 8 (Cyan)
+  '#84cc16', // 9 (Lime)
+  '#f43f5e', // 10 (Rose)
+  '#6366f1', // 11 (Indigo)
+  '#14b8a6', // 12 (Teal)
+  '#a855f7', // 13 (Purple)
+  '#d946ef', // 14 (Fuchsia)
+  '#0ea5e9', // 15 (Sky)
+  '#eab308', // 16 (Yellow)
+  '#22c55e', // 17 (Green)
+  '#f472b6', // 18 (Light Pink)
+  '#fb7185', // 19 (Rose Light)
+  '#38bdf8', // 20 (Sky Light)
+  '#818cf8', // 21 (Indigo Light)
+  '#34d399', // 22 (Emerald Light)
+  '#fb923c', // 23 (Orange Light)
+  '#a78bfa', // 24 (Violet Light)
 ];
 
 export const TEMPLATE_FILES = [

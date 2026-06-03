@@ -48,6 +48,11 @@ export class UIController {
       name: name.replace('TT2_', '')
     }));
 
+    // Skeleton loader
+    gallery.innerHTML = fileList.map(() =>
+      '<div class="template-skeleton"></div>'
+    ).join('');
+
     try {
       this.state.templates = await ImageProcessor.loadTemplates(fileList, 32);
       this.renderTemplateGallery();
@@ -57,6 +62,7 @@ export class UIController {
       this.buildPalette();
       this.renderManualGrid();
     } catch (err) {
+      gallery.innerHTML = '';
       status.textContent = 'Failed to load templates: ' + err.message;
       status.style.color = 'var(--accent-danger)';
     }
@@ -74,6 +80,7 @@ export class UIController {
       const imgEl = document.createElement('img');
       imgEl.src = t.img.src;
       imgEl.alt = t.name;
+      imgEl.loading = 'lazy';
       item.appendChild(imgEl);
 
       const label = document.createElement('span');
@@ -359,7 +366,6 @@ export class UIController {
 
       $('input-rows').value = rows;
       $('input-cols').value = cols;
-      $('input-types').value = this.state.numTypes;
 
       const usedNames = result.usedTemplates.map(t => t.name).join(', ');
       this.showStatus(`Detected ${this.state.numTypes} types (${usedNames}) on ${rows}×${cols}. Verify in Manual tab.`, 'success');
@@ -406,6 +412,7 @@ export class UIController {
     this.state.originalGrid = GridEngine.cloneGrid(this.state.grid);
 
     if (this.state.solverWorker) this.state.solverWorker.terminate();
+    // Use string URL to prevent 404/resolution issues in mobile Safari
     this.state.solverWorker = new Worker('js/solver-worker.js');
 
     const timeLimit = (parseInt($('time-limit').value) || 30) * 1000;
@@ -439,7 +446,9 @@ export class UIController {
     };
 
     this.state.solverWorker.onerror = (err) => {
-      this.showStatus('Solver error: ' + err.message, 'error');
+      console.error('Worker error:', err);
+      const errMsg = err.message || 'Worker initialization failed (check browser compatibility/security settings)';
+      this.showStatus('Solver error: ' + errMsg, 'error');
       this.solverDone();
     };
 
