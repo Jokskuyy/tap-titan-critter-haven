@@ -231,6 +231,21 @@ export class UIController {
     input.addEventListener('change', () => {
       if (input.files.length > 0) this.handleFile(input.files[0]);
     });
+
+    // Global paste handler
+    document.addEventListener('paste', e => {
+      if (e.clipboardData && e.clipboardData.files.length > 0) {
+        const file = e.clipboardData.files[0];
+        if (file.type.startsWith('image/')) {
+          e.preventDefault();
+          this.handleFile(file);
+          
+          // Switch to image tab automatically
+          this.tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === 'image'));
+          this.tabContents.forEach(c => c.classList.toggle('active', c.dataset.tab === 'image'));
+        }
+      }
+    });
   }
 
   async handleFile(file) {
