@@ -190,7 +190,11 @@ export class UIController {
           }
         }
         cell.addEventListener('click', () => {
-          this.state.grid[r][c] = this.state.selectedType;
+          if (this.state.grid[r][c] === this.state.selectedType && this.state.selectedType !== 0) {
+            this.state.grid[r][c] = 0; // Erase if clicking the same block type again
+          } else {
+            this.state.grid[r][c] = this.state.selectedType; // Set to selected type
+          }
           this.state.originalGrid = GridEngine.cloneGrid(this.state.grid);
           this.renderManualGrid();
           this.renderer.render(this.state);
