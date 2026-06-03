@@ -153,7 +153,8 @@ export class UIController {
   buildManualGrid() {
     this.state.gridRows = parseInt($('input-rows').value) || 7;
     this.state.gridCols = parseInt($('input-cols').value) || 7;
-    this.state.numTypes = parseInt($('input-types').value) || 5;
+    const typesEl = $('input-types');
+    this.state.numTypes = typesEl ? parseInt(typesEl.value) : 5;
     this.state.grid = GridEngine.createGrid(this.state.gridRows, this.state.gridCols);
     this.state.originalGrid = GridEngine.cloneGrid(this.state.grid);
     this.state.selectedType = 1;
@@ -389,7 +390,8 @@ export class UIController {
   fillRandom() {
     this.state.gridRows = parseInt($('input-rows').value) || 7;
     this.state.gridCols = parseInt($('input-cols').value) || 7;
-    this.state.numTypes = parseInt($('input-types').value) || 5;
+    const typesEl = $('input-types');
+    this.state.numTypes = typesEl ? parseInt(typesEl.value) : 5;
     this.state.grid = [];
     for (let r = 0; r < this.state.gridRows; r++) {
       const row = [];
