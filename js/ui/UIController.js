@@ -109,7 +109,9 @@ export class UIController {
     });
     paletteEl.appendChild(eraser);
 
-    for (let i = 1; i <= this.state.numTypes; i++) {
+    const totalSwatches = this.state.templates.length > 0 ? this.state.templates.length : this.state.numTypes;
+
+    for (let i = 1; i <= totalSwatches; i++) {
       const swatch = document.createElement('div');
       swatch.className = 'color-swatch' + (this.state.selectedType === i ? ' active' : '');
       const tpl = this.state.activeTemplateMap[i];
@@ -143,7 +145,7 @@ export class UIController {
 
   buildDefaultTemplateMap() {
     this.state.activeTemplateMap = {};
-    for (let i = 0; i < this.state.numTypes && i < this.state.templates.length; i++) {
+    for (let i = 0; i < this.state.templates.length; i++) {
       this.state.activeTemplateMap[i + 1] = this.state.templates[i];
     }
   }
