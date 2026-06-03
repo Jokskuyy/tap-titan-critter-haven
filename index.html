@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Critter Heaven Bot — Optimal solver for the Tap Titans 2 block-matching puzzle minigame. Upload a screenshot or build your grid manually, and find the minimum taps to clear.">
+  <title>Critter Heaven Bot — TT2 Puzzle Solver</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- Header -->
+    <header>
+      <h1>🐾 Critter Heaven Bot</h1>
+      <p class="subtitle">Optimal solver for the TT2 block-matching puzzle</p>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="main-layout">
+
+      <!-- Sidebar -->
+      <aside class="sidebar">
+
+        <!-- Input Mode Tabs -->
+        <div class="card">
+          <div class="tabs">
+            <button class="tab-btn active" data-tab="manual" id="tab-manual-btn">✏️ Manual</button>
+            <button class="tab-btn" data-tab="image" id="tab-image-btn">📷 Image</button>
+          </div>
+
+          <!-- Manual Input Tab -->
+          <div class="tab-content active" data-tab="manual" id="tab-manual">
+            <div class="grid-size-controls mt-12">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="input-rows">Rows</label>
+                  <input type="number" id="input-rows" min="2" max="12" value="7">
+                </div>
+                <div class="form-group">
+                  <label for="input-cols">Cols</label>
+                  <input type="number" id="input-cols" min="2" max="12" value="7">
+                </div>
+                <div class="form-group">
+                  <label for="input-types">Types</label>
+                  <input type="number" id="input-types" min="2" max="10" value="5">
+                </div>
+              </div>
+              <button class="btn btn-outline btn-sm btn-block" id="btn-build-grid">Build Grid</button>
+            </div>
+
+            <!-- Color Palette -->
+            <div class="card-title"><span class="icon">🎨</span> Block Palette</div>
+            <div class="color-palette" id="color-palette">
+              <!-- Populated by JS -->
+            </div>
+
+            <!-- Manual Grid -->
+            <div class="manual-grid-wrapper" id="manual-grid">
+              <!-- Populated by JS -->
+            </div>
+
+            <div class="flex gap-8 mt-12">
+              <button class="btn btn-outline btn-sm" id="btn-fill-random" style="flex:1">🎲 Random</button>
+              <button class="btn btn-outline btn-sm" id="btn-clear-grid" style="flex:1">🗑️ Clear</button>
+            </div>
+          </div>
+
+          <!-- Image Input Tab -->
+          <div class="tab-content" data-tab="image" id="tab-image">
+            <div class="upload-zone mt-12" id="upload-zone">
+              <span class="upload-icon">📸</span>
+              <p class="upload-text"><strong>Click or drag</strong> a screenshot here</p>
+              <input type="file" id="file-input" accept="image/*">
+            </div>
+
+            <div class="crop-preview" id="crop-preview">
+              <canvas id="crop-canvas"></canvas>
+            </div>
+
+            <div class="grid-size-controls mt-12" id="image-grid-controls" style="display:none">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="img-rows">Rows</label>
+                  <input type="number" id="img-rows" min="2" max="12" value="7">
+                </div>
+                <div class="form-group">
+                  <label for="img-cols">Cols</label>
+                  <input type="number" id="img-cols" min="2" max="12" value="7">
+                </div>
+                <div class="form-group">
+                  <label for="img-types">Types (auto)</label>
+                  <input type="number" id="img-types" min="2" max="10" value="" placeholder="auto">
+                </div>
+              </div>
+              <p class="text-sm text-muted mt-12">Draw a rectangle over the grid area, then click Detect.</p>
+              <button class="btn btn-primary btn-sm btn-block mt-12" id="btn-detect">🔍 Detect Grid</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Solver Controls -->
+        <div class="card">
+          <div class="card-title"><span class="icon">🧠</span> Solver</div>
+          <div class="solver-controls">
+            <button class="btn btn-success btn-block" id="btn-solve" disabled>
+              ⚡ Solve
+            </button>
+          </div>
+          <div class="solver-controls mt-12">
+            <div class="time-limit-group">
+              <label for="time-limit">Time limit</label>
+              <input type="number" id="time-limit" min="1" max="300" value="30">
+              <span class="text-sm text-muted">sec</span>
+            </div>
+            <button class="btn btn-danger btn-sm hidden" id="btn-abort">⏹ Abort</button>
+          </div>
+
+          <!-- Progress -->
+          <div class="progress-section" id="progress-section">
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="progress-bar" style="width: 0%"></div>
+            </div>
+            <div class="progress-stats">
+              <span>States: <span class="stat-value" id="stat-states">0</span></span>
+              <span>Best: <span class="stat-value" id="stat-best">—</span></span>
+              <span>Time: <span class="stat-value" id="stat-time">0s</span></span>
+            </div>
+          </div>
+
+          <!-- Status -->
+          <div class="status-msg" id="status-msg"></div>
+        </div>
+
+      </aside>
+
+      <!-- Main Content -->
+      <main class="main-content">
+
+        <!-- Grid Display -->
+        <div class="card">
+          <div class="card-title"><span class="icon">🎮</span> Game Board</div>
+          <div class="grid-canvas-wrapper" id="grid-canvas-wrapper">
+            <canvas id="grid-canvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Solution -->
+        <div class="card solution-section" id="solution-section">
+          <div class="solution-header">
+            <div class="card-title" style="margin-bottom:0"><span class="icon">✨</span> Solution</div>
+            <div id="solution-badge"></div>
+          </div>
+
+          <div class="playback-controls">
+            <button class="btn btn-outline" id="btn-first" title="First">⏮</button>
+            <button class="btn btn-outline" id="btn-prev" title="Previous">◀</button>
+            <span class="step-counter" id="step-counter">0 / 0</span>
+            <button class="btn btn-outline" id="btn-next" title="Next">▶</button>
+            <button class="btn btn-outline" id="btn-last" title="Last">⏭</button>
+            <button class="btn btn-primary btn-play" id="btn-autoplay" title="Auto-play">▶</button>
+          </div>
+
+          <div class="step-info" id="step-info"></div>
+
+          <div class="solution-meta mt-12" id="solution-meta"></div>
+
+          <div class="move-list" id="move-list">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+      </main>
+    </div>
+
+  </div>
+
+  <script src="js/grid-engine.js"></script>
+  <script src="js/image-processor.js"></script>
+  <script>
+    /* ============================================
+       Critter Heaven Bot — App Controller
+       ============================================ */
+
+    (() => {
+      'use strict';
+
+      // ---- Block Colors ----
+      const BLOCK_COLORS = [
+        null, // 0 = empty
+        '#f59e0b', // 1
+        '#ef4444', // 2
+        '#3b82f6', // 3
+        '#f97316', // 4
+        '#10b981', // 5
+        '#8b5cf6', // 6
+        '#ec4899', // 7
+        '#06b6d4', // 8
+        '#84cc16', // 9
+        '#f43f5e', // 10
+      ];
+
+      const BLOCK_LABELS = ['', '🍌', '🧣', '🕶️', '🍯', '🌿', '💎', '🌸', '💧', '🍀', '🔥'];
+
+      // ---- State ----
+      let grid = null;
+      let gridRows = 7;
+      let gridCols = 7;
+      let numTypes = 5;
+      let selectedType = 1;
+      let solverWorker = null;
+      let solution = null;
+      let currentStep = -1; // -1 = initial state
+      let autoplayInterval = null;
+      let originalGrid = null;
+
+      // Image crop state
+      let cropImage = null;
+      let cropRect = null;
+      let isCropping = false;
+      let cropStart = null;
+
+      // ---- DOM Refs ----
+      const $ = id => document.getElementById(id);
+
+      const tabBtns = document.querySelectorAll('.tab-btn');
+      const tabContents = document.querySelectorAll('.tab-content');
+      const manualGridEl = $('manual-grid');
+      const paletteEl = $('color-palette');
+      const gridCanvas = $('grid-canvas');
+      const gridCtx = gridCanvas.getContext('2d');
+      const cropCanvas = $('crop-canvas');
+      const cropCtx = cropCanvas.getContext('2d');
+
+      // ---- Init ----
+      function init() {
+        setupTabs();
+        buildPalette();
+        buildManualGrid();
+        setupUpload();
+        setupCrop();
+        setupSolver();
+        setupPlayback();
+        renderGrid();
+      }
+
+      // ---- Tabs ----
+      function setupTabs() {
+        tabBtns.forEach(btn => {
+          btn.addEventListener('click', () => {
+            const tab = btn.dataset.tab;
+            tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+            tabContents.forEach(c => c.classList.toggle('active', c.dataset.tab === tab));
+          });
+        });
+      }
+
+      // ---- Color Palette ----
+      function buildPalette() {
+        paletteEl.innerHTML = '';
+
+        // Eraser
+        const eraser = document.createElement('div');
+        eraser.className = 'color-swatch eraser' + (selectedType === 0 ? ' active' : '');
+        eraser.textContent = '✕';
+        eraser.title = 'Eraser';
+        eraser.addEventListener('click', () => {
+          selectedType = 0;
+          updatePaletteSelection();
+        });
+        paletteEl.appendChild(eraser);
+
+        for (let i = 1; i <= numTypes; i++) {
+          const swatch = document.createElement('div');
+          swatch.className = 'color-swatch' + (selectedType === i ? ' active' : '');
+          swatch.style.background = BLOCK_COLORS[i] || '#888';
+          swatch.textContent = i;
+          swatch.title = `Type ${i}`;
+          swatch.addEventListener('click', () => {
+            selectedType = i;
+            updatePaletteSelection();
+          });
+          paletteEl.appendChild(swatch);
+        }
+      }
+
+      function updatePaletteSelection() {
+        const swatches = paletteEl.querySelectorAll('.color-swatch');
+        swatches.forEach((s, idx) => {
+          s.classList.toggle('active', idx === selectedType || (idx === 0 && selectedType === 0));
+        });
+      }
+
+      // ---- Manual Grid ----
+      function buildManualGrid() {
+        gridRows = parseInt($('input-rows').value) || 7;
+        gridCols = parseInt($('input-cols').value) || 7;
+        numTypes = parseInt($('input-types').value) || 5;
+        grid = GridEngine.createGrid(gridRows, gridCols);
+        originalGrid = GridEngine.cloneGrid(grid);
+        selectedType = 1;
+        buildPalette();
+        renderManualGrid();
+        renderGrid();
+        updateSolveButton();
+        clearSolution();
+      }
+
+      function renderManualGrid() {
+        manualGridEl.innerHTML = '';
+        for (let r = 0; r < gridRows; r++) {
+          const rowEl = document.createElement('div');
+          rowEl.className = 'manual-grid-row';
+          for (let c = 0; c < gridCols; c++) {
+            const cell = document.createElement('div');
+            cell.className = 'manual-grid-cell' + (grid[r][c] === 0 ? ' empty' : '');
+            if (grid[r][c] !== 0) {
+              cell.style.background = BLOCK_COLORS[grid[r][c]] || '#888';
+              cell.textContent = grid[r][c];
+            }
+            cell.addEventListener('click', () => {
+              grid[r][c] = selectedType;
+              originalGrid = GridEngine.cloneGrid(grid);
+              renderManualGrid();
+              renderGrid();
+              updateSolveButton();
+              clearSolution();
+            });
+            cell.addEventListener('contextmenu', (e) => {
+              e.preventDefault();
+              grid[r][c] = 0;
+              originalGrid = GridEngine.cloneGrid(grid);
+              renderManualGrid();
+              renderGrid();
+              updateSolveButton();
+              clearSolution();
+            });
+            rowEl.appendChild(cell);
+          }
+          manualGridEl.appendChild(rowEl);
+        }
+      }
+
+      // ---- Grid Canvas Rendering ----
+      function renderGrid(highlightCells = null, tapCell = null) {
+        if (!grid) return;
+        const wrapper = $('grid-canvas-wrapper');
+        const dpr = window.devicePixelRatio || 1;
+        const size = Math.min(wrapper.clientWidth, 500);
+        gridCanvas.width = size * dpr;
+        gridCanvas.height = size * dpr;
+        gridCanvas.style.width = size + 'px';
+        gridCanvas.style.height = size + 'px';
+        gridCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const padding = 8;
+        const gap = 3;
+        const cellW = (size - padding * 2 - gap * (gridCols - 1)) / gridCols;
+        const cellH = (size - padding * 2 - gap * (gridRows - 1)) / gridRows;
+        const cellSize = Math.min(cellW, cellH);
+        const offsetX = (size - (cellSize * gridCols + gap * (gridCols - 1))) / 2;
+        const offsetY = (size - (cellSize * gridRows + gap * (gridRows - 1))) / 2;
+
+        // Background
+        gridCtx.fillStyle = '#0f1320';
+        gridCtx.beginPath();
+        gridCtx.roundRect(0, 0, size, size, 12);
+        gridCtx.fill();
+
+        // Subtle grid lines
+        gridCtx.strokeStyle = 'rgba(255,255,255,0.03)';
+        gridCtx.lineWidth = 1;
+
+        const displayGrid = getCurrentDisplayGrid();
+
+        for (let r = 0; r < gridRows; r++) {
+          for (let c = 0; c < gridCols; c++) {
+            const x = offsetX + c * (cellSize + gap);
+            const y = offsetY + r * (cellSize + gap);
+            const type = displayGrid[r][c];
+            const radius = Math.max(4, cellSize * 0.15);
+
+            const isHighlighted = highlightCells && highlightCells.some(h => h.row === r && h.col === c);
+            const isTap = tapCell && tapCell.row === r && tapCell.col === c;
+
+            if (type === 0) {
+              // Empty cell
+              gridCtx.fillStyle = 'rgba(255,255,255,0.02)';
+              gridCtx.beginPath();
+              gridCtx.roundRect(x, y, cellSize, cellSize, radius);
+              gridCtx.fill();
+            } else {
+              // Block
+              const color = BLOCK_COLORS[type] || '#888';
+              gridCtx.fillStyle = color;
+              gridCtx.beginPath();
+              gridCtx.roundRect(x, y, cellSize, cellSize, radius);
+              gridCtx.fill();
+
+              // Glossy highlight
+              const gradient = gridCtx.createLinearGradient(x, y, x, y + cellSize);
+              gradient.addColorStop(0, 'rgba(255,255,255,0.2)');
+              gradient.addColorStop(0.5, 'rgba(255,255,255,0)');
+              gridCtx.fillStyle = gradient;
+              gridCtx.fill();
+
+              // Label
+              gridCtx.fillStyle = 'rgba(255,255,255,0.85)';
+              gridCtx.font = `bold ${Math.max(10, cellSize * 0.35)}px Inter, sans-serif`;
+              gridCtx.textAlign = 'center';
+              gridCtx.textBaseline = 'middle';
+              gridCtx.fillText(type, x + cellSize / 2, y + cellSize / 2);
+
+              // Highlight border
+              if (isHighlighted) {
+                gridCtx.strokeStyle = isTap ? '#ffffff' : 'rgba(255,255,255,0.6)';
+                gridCtx.lineWidth = isTap ? 3 : 2;
+                gridCtx.beginPath();
+                gridCtx.roundRect(x + 1, y + 1, cellSize - 2, cellSize - 2, radius);
+                gridCtx.stroke();
+
+                if (isTap) {
+                  // Tap indicator — pulsing ring
+                  gridCtx.strokeStyle = 'rgba(255,255,255,0.3)';
+                  gridCtx.lineWidth = 1;
+                  gridCtx.beginPath();
+                  gridCtx.roundRect(x - 2, y - 2, cellSize + 4, cellSize + 4, radius + 2);
+                  gridCtx.stroke();
+                }
+              }
+            }
+          }
+        }
+      }
+
+      function getCurrentDisplayGrid() {
+        if (!solution || currentStep < 0) return grid;
+        if (currentStep === 0) return originalGrid;
+        return solution[currentStep - 1].gridAfter;
+      }
+
+      // ---- Upload ----
+      function setupUpload() {
+        const zone = $('upload-zone');
+        const input = $('file-input');
+
+        zone.addEventListener('click', () => input.click());
+        zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+        zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+        zone.addEventListener('drop', e => {
+          e.preventDefault();
+          zone.classList.remove('dragover');
+          if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+        });
+        input.addEventListener('change', () => {
+          if (input.files.length > 0) handleFile(input.files[0]);
+        });
+      }
+
+      async function handleFile(file) {
+        try {
+          cropImage = await ImageProcessor.loadImage(file);
+          const preview = $('crop-preview');
+          preview.style.display = 'block';
+          cropCanvas.width = cropImage.width;
+          cropCanvas.height = cropImage.height;
+          cropCtx.drawImage(cropImage, 0, 0);
+          cropRect = null;
+          $('image-grid-controls').style.display = 'block';
+          showStatus('Image loaded. Draw a rectangle over the grid area.', 'info');
+        } catch (err) {
+          showStatus('Failed to load image: ' + err.message, 'error');
+        }
+      }
+
+      // ---- Crop Tool ----
+      function setupCrop() {
+        cropCanvas.addEventListener('mousedown', e => {
+          if (!cropImage) return;
+          isCropping = true;
+          const rect = cropCanvas.getBoundingClientRect();
+          const scaleX = cropImage.width / rect.width;
+          const scaleY = cropImage.height / rect.height;
+          cropStart = {
+            x: (e.clientX - rect.left) * scaleX,
+            y: (e.clientY - rect.top) * scaleY
+          };
+        });
+
+        cropCanvas.addEventListener('mousemove', e => {
+          if (!isCropping || !cropImage) return;
+          const rect = cropCanvas.getBoundingClientRect();
+          const scaleX = cropImage.width / rect.width;
+          const scaleY = cropImage.height / rect.height;
+          const x = (e.clientX - rect.left) * scaleX;
+          const y = (e.clientY - rect.top) * scaleY;
+
+          // Redraw image + crop rectangle
+          cropCtx.drawImage(cropImage, 0, 0);
+          cropCtx.strokeStyle = '#6366f1';
+          cropCtx.lineWidth = 3;
+          cropCtx.setLineDash([8, 4]);
+          cropCtx.strokeRect(cropStart.x, cropStart.y, x - cropStart.x, y - cropStart.y);
+          cropCtx.setLineDash([]);
+
+          // Dim outside crop area
+          cropCtx.fillStyle = 'rgba(0,0,0,0.4)';
+          cropCtx.fillRect(0, 0, cropImage.width, cropStart.y);
+          cropCtx.fillRect(0, y, cropImage.width, cropImage.height - y);
+          cropCtx.fillRect(0, cropStart.y, cropStart.x, y - cropStart.y);
+          cropCtx.fillRect(x, cropStart.y, cropImage.width - x, y - cropStart.y);
+        });
+
+        cropCanvas.addEventListener('mouseup', e => {
+          if (!isCropping || !cropImage) return;
+          isCropping = false;
+          const rect = cropCanvas.getBoundingClientRect();
+          const scaleX = cropImage.width / rect.width;
+          const scaleY = cropImage.height / rect.height;
+          const x = (e.clientX - rect.left) * scaleX;
+          const y = (e.clientY - rect.top) * scaleY;
+
+          cropRect = {
+            x: Math.min(cropStart.x, x),
+            y: Math.min(cropStart.y, y),
+            width: Math.abs(x - cropStart.x),
+            height: Math.abs(y - cropStart.y)
+          };
+
+          if (cropRect.width < 20 || cropRect.height < 20) {
+            cropRect = null;
+            cropCtx.drawImage(cropImage, 0, 0);
+            showStatus('Crop area too small. Draw a larger rectangle.', 'warning');
+          }
+        });
+
+        // Detect button
+        $('btn-detect').addEventListener('click', detectGrid);
+      }
+
+      function detectGrid() {
+        if (!cropImage) {
+          showStatus('Upload an image first.', 'warning');
+          return;
+        }
+
+        // If no crop rect, use full image
+        const rect = cropRect || { x: 0, y: 0, width: cropImage.width, height: cropImage.height };
+        const rows = parseInt($('img-rows').value) || 7;
+        const cols = parseInt($('img-cols').value) || 7;
+        const typesVal = $('img-types').value.trim();
+        const types = typesVal ? parseInt(typesVal) : null;
+
+        try {
+          const result = ImageProcessor.processImage(cropImage, rect, rows, cols, types);
+          grid = result.grid;
+          gridRows = rows;
+          gridCols = cols;
+          numTypes = result.k;
+          originalGrid = GridEngine.cloneGrid(grid);
+
+          // Update manual tab inputs
+          $('input-rows').value = rows;
+          $('input-cols').value = cols;
+          $('input-types').value = numTypes;
+
+          buildPalette();
+          renderManualGrid();
+          renderGrid();
+          updateSolveButton();
+          clearSolution();
+          showStatus(`Detected ${numTypes} block types on ${rows}×${cols} grid. Verify and correct if needed.`, 'success');
+
+          // Switch to manual tab for editing
+          tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === 'manual'));
+          tabContents.forEach(c => c.classList.toggle('active', c.dataset.tab === 'manual'));
+        } catch (err) {
+          showStatus('Detection failed: ' + err.message, 'error');
+        }
+      }
+
+      // ---- Solver ----
+      function setupSolver() {
+        $('btn-build-grid').addEventListener('click', buildManualGrid);
+        $('btn-fill-random').addEventListener('click', fillRandom);
+        $('btn-clear-grid').addEventListener('click', clearGrid);
+        $('btn-solve').addEventListener('click', startSolve);
+        $('btn-abort').addEventListener('click', abortSolve);
+      }
+
+      function fillRandom() {
+        gridRows = parseInt($('input-rows').value) || 7;
+        gridCols = parseInt($('input-cols').value) || 7;
+        numTypes = parseInt($('input-types').value) || 5;
+        grid = [];
+        for (let r = 0; r < gridRows; r++) {
+          const row = [];
+          for (let c = 0; c < gridCols; c++) {
+            row.push(Math.floor(Math.random() * numTypes) + 1);
+          }
+          grid.push(row);
+        }
+        originalGrid = GridEngine.cloneGrid(grid);
+        buildPalette();
+        renderManualGrid();
+        renderGrid();
+        updateSolveButton();
+        clearSolution();
+      }
+
+      function clearGrid() {
+        grid = GridEngine.createGrid(gridRows, gridCols);
+        originalGrid = GridEngine.cloneGrid(grid);
+        renderManualGrid();
+        renderGrid();
+        updateSolveButton();
+        clearSolution();
+      }
+
+      function updateSolveButton() {
+        const hasBlocks = grid && GridEngine.countRemaining(grid) > 0;
+        $('btn-solve').disabled = !hasBlocks;
+      }
+
+      function startSolve() {
+        if (!grid || GridEngine.countRemaining(grid) === 0) return;
+
+        clearSolution();
+        originalGrid = GridEngine.cloneGrid(grid);
+
+        // Create worker
+        if (solverWorker) solverWorker.terminate();
+        solverWorker = new Worker('js/solver-worker.js');
+
+        const timeLimit = (parseInt($('time-limit').value) || 30) * 1000;
+
+        // Show progress
+        $('progress-section').classList.add('active');
+        $('btn-solve').disabled = true;
+        $('btn-abort').classList.remove('hidden');
+        showStatus('Solving...', 'info');
+
+        solverWorker.onmessage = (e) => {
+          const data = e.data;
+
+          if (data.type === 'progress') {
+            $('stat-states').textContent = data.statesExplored.toLocaleString();
+            $('stat-best').textContent = data.currentBest !== null ? `${data.currentBest} taps` : '—';
+            $('stat-time').textContent = (data.elapsed / 1000).toFixed(1) + 's';
+            // Fake progress bar
+            const progress = Math.min(90, (data.elapsed / timeLimit) * 100);
+            $('progress-bar').style.width = progress + '%';
+          }
+
+          else if (data.type === 'solution') {
+            $('progress-bar').style.width = '100%';
+            solution = data.moves;
+            currentStep = 0;
+            showSolution(data);
+            solverDone();
+          }
+
+          else if (data.type === 'nosolution') {
+            solution = data.bestPartial;
+            currentStep = 0;
+            showPartialSolution(data);
+            solverDone();
+          }
+        };
+
+        solverWorker.onerror = (err) => {
+          showStatus('Solver error: ' + err.message, 'error');
+          solverDone();
+        };
+
+        solverWorker.postMessage({ type: 'solve', grid: grid, timeLimit });
+      }
+
+      function abortSolve() {
+        if (solverWorker) {
+          solverWorker.postMessage({ type: 'abort' });
+        }
+      }
+
+      function solverDone() {
+        $('btn-solve').disabled = false;
+        $('btn-abort').classList.add('hidden');
+        setTimeout(() => {
+          $('progress-section').classList.remove('active');
+        }, 1000);
+      }
+
+      // ---- Solution Display ----
+      function showSolution(data) {
+        const section = $('solution-section');
+        section.classList.add('active');
+
+        $('solution-badge').innerHTML = data.optimal
+          ? '<span class="solution-badge optimal">✅ Optimal</span>'
+          : '<span class="solution-badge suboptimal">⚡ Best Found</span>';
+
+        $('solution-meta').innerHTML = `
+          <strong>${data.taps}</strong> taps · 
+          <strong>${data.totalStates.toLocaleString()}</strong> states explored · 
+          <strong>${(data.time / 1000).toFixed(1)}s</strong> elapsed
+        `;
+
+        showStatus(`Solution found: ${data.taps} taps${data.optimal ? ' (optimal)' : ''}`, 'success');
+        buildMoveList();
+        updatePlayback();
+      }
+
+      function showPartialSolution(data) {
+        const section = $('solution-section');
+        section.classList.add('active');
+
+        $('solution-badge').innerHTML = '<span class="solution-badge suboptimal">⚠️ Partial Clear</span>';
+        $('solution-meta').innerHTML = `<strong>${data.taps}</strong> taps (partial clear)`;
+
+        showStatus('No full clear found. Showing best partial solution.', 'warning');
+        buildMoveList();
+        updatePlayback();
+      }
+
+      function clearSolution() {
+        solution = null;
+        currentStep = -1;
+        stopAutoplay();
+        $('solution-section').classList.remove('active');
+        $('move-list').innerHTML = '';
+      }
+
+      function buildMoveList() {
+        const list = $('move-list');
+        list.innerHTML = '';
+
+        if (!solution) return;
+
+        // Initial state item
+        const initItem = document.createElement('div');
+        initItem.className = 'move-item' + (currentStep === 0 ? ' active' : '');
+        initItem.innerHTML = `
+          <span class="move-num">0</span>
+          <span class="move-detail">Initial state</span>
+        `;
+        initItem.addEventListener('click', () => goToStep(0));
+        list.appendChild(initItem);
+
+        solution.forEach((move, i) => {
+          const item = document.createElement('div');
+          item.className = 'move-item' + (currentStep === i + 1 ? ' active' : '');
+          const color = BLOCK_COLORS[move.type] || '#888';
+          item.innerHTML = `
+            <span class="move-num">${i + 1}</span>
+            <span class="move-color" style="background:${color}"></span>
+            <span class="move-detail">Tap <strong>(${move.tap.row},${move.tap.col})</strong> — ${move.groupSize} block${move.groupSize > 1 ? 's' : ''}</span>
+          `;
+          item.addEventListener('click', () => goToStep(i + 1));
+          list.appendChild(item);
+        });
+      }
+
+      // ---- Playback ----
+      function setupPlayback() {
+        $('btn-first').addEventListener('click', () => goToStep(0));
+        $('btn-prev').addEventListener('click', () => goToStep(Math.max(0, currentStep - 1)));
+        $('btn-next').addEventListener('click', () => {
+          if (solution) goToStep(Math.min(solution.length, currentStep + 1));
+        });
+        $('btn-last').addEventListener('click', () => {
+          if (solution) goToStep(solution.length);
+        });
+        $('btn-autoplay').addEventListener('click', toggleAutoplay);
+      }
+
+      function goToStep(step) {
+        if (!solution) return;
+        currentStep = step;
+        updatePlayback();
+      }
+
+      function updatePlayback() {
+        if (!solution) return;
+
+        const total = solution.length;
+        $('step-counter').textContent = `${currentStep} / ${total}`;
+
+        // Update grid display
+        let displayGrid;
+        let highlightCells = null;
+        let tapCell = null;
+
+        if (currentStep === 0) {
+          displayGrid = originalGrid;
+          // Highlight next move
+          if (solution.length > 0) {
+            highlightCells = solution[0].cells;
+            tapCell = solution[0].tap;
+          }
+        } else {
+          displayGrid = solution[currentStep - 1].gridAfter;
+          // Highlight next move if exists
+          if (currentStep < solution.length) {
+            highlightCells = solution[currentStep].cells;
+            tapCell = solution[currentStep].tap;
+          }
+        }
+
+        // Temporarily set grid for rendering
+        const savedGrid = grid;
+        grid = displayGrid;
+        renderGrid(highlightCells, tapCell);
+        grid = savedGrid;
+
+        // Step info
+        if (currentStep === 0 && solution.length > 0) {
+          const next = solution[0];
+          $('step-info').innerHTML = `Next: tap <span class="highlight">(${next.tap.row}, ${next.tap.col})</span> — ${next.groupSize} block${next.groupSize > 1 ? 's' : ''}`;
+        } else if (currentStep > 0 && currentStep <= solution.length) {
+          const prev = solution[currentStep - 1];
+          let info = `Tapped <span class="highlight">(${prev.tap.row}, ${prev.tap.col})</span> — removed ${prev.groupSize} block${prev.groupSize > 1 ? 's' : ''}`;
+          if (currentStep < solution.length) {
+            const next = solution[currentStep];
+            info += ` · Next: <span class="highlight">(${next.tap.row}, ${next.tap.col})</span>`;
+          } else {
+            info += ' · <span class="highlight">✨ Board cleared!</span>';
+          }
+          $('step-info').innerHTML = info;
+        } else {
+          $('step-info').innerHTML = '';
+        }
+
+        // Update move list active state
+        const items = $('move-list').querySelectorAll('.move-item');
+        items.forEach((item, i) => {
+          item.classList.toggle('active', i === currentStep);
+        });
+
+        // Scroll active item into view
+        const activeItem = $('move-list').querySelector('.move-item.active');
+        if (activeItem) activeItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+
+      function toggleAutoplay() {
+        if (autoplayInterval) {
+          stopAutoplay();
+        } else {
+          startAutoplay();
+        }
+      }
+
+      function startAutoplay() {
+        if (!solution) return;
+        $('btn-autoplay').textContent = '⏸';
+        autoplayInterval = setInterval(() => {
+          if (currentStep >= solution.length) {
+            stopAutoplay();
+            return;
+          }
+          goToStep(currentStep + 1);
+        }, 800);
+      }
+
+      function stopAutoplay() {
+        if (autoplayInterval) {
+          clearInterval(autoplayInterval);
+          autoplayInterval = null;
+        }
+        $('btn-autoplay').textContent = '▶';
+      }
+
+      // ---- Status ----
+      function showStatus(msg, type = 'info') {
+        const el = $('status-msg');
+        el.className = `status-msg active ${type}`;
+        el.innerHTML = `<span>${msg}</span>`;
+      }
+
+      // ---- Start ----
+      init();
+
+    })();
+  </script>
+</body>
+</html>
