@@ -8,6 +8,7 @@
   <meta name="description"
     content="Critter Heaven Bot — Optimal solver for the Tap Titans 2 block-matching puzzle minigame. Upload a screenshot or build your grid manually, and find the minimum taps to clear.">
   <title>Critter Heaven Bot — TT2 Puzzle Solver</title>
+  <link rel="icon" type="image/png" href="imgs/logo.png">
   <link rel="stylesheet" href="css/style.css">
 </head>
 
@@ -16,10 +17,13 @@
 
     <!-- Header -->
     <header>
-      <h1>🐾 Critter Heaven Bot</h1>
+      <div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 8px;">
+        <img src="imgs/logo.png" alt="Critter Heaven Logo" style="width: 48px; height: 48px; border-radius: 8px; image-rendering: pixelated; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+        <h1 style="margin-bottom: 0;">Critter Heaven Bot</h1>
+      </div>
       <p class="subtitle">Optimal solver for the TT2 block-matching puzzle</p>
       <div style="margin-top: 12px;">
-        <button id="btn-tutorial" class="btn btn-primary btn-sm" style="animation: pulse 2s infinite; box-shadow: 0 0 15px rgba(99, 102, 241, 0.6); border: 1px solid rgba(255,255,255,0.4);">✨ Tutorial</button>
+        <button id="btn-tutorial" class="btn btn-primary btn-sm" style="animation: pulse 2s infinite; box-shadow: 0 0 15px rgba(99, 102, 241, 0.6); border: 1px solid rgba(255,255,255,0.4);">Tutorial</button>
       </div>
     </header>
 
@@ -32,8 +36,8 @@
         <!-- Input Mode Tabs -->
         <div class="card">
           <div class="tabs">
-            <button class="tab-btn active" data-tab="manual" id="tab-manual-btn">✏️ Manual</button>
-            <button class="tab-btn" data-tab="image" id="tab-image-btn">📷 Image</button>
+            <button class="tab-btn active" data-tab="manual" id="tab-manual-btn">Manual</button>
+            <button class="tab-btn" data-tab="image" id="tab-image-btn">Image</button>
           </div>
 
           <!-- Manual Input Tab -->
@@ -57,7 +61,7 @@
             </div>
 
             <!-- Color Palette -->
-            <div class="card-title"><span class="icon">🎨</span> Block Palette</div>
+            <div class="card-title">Block Palette</div>
             <div class="color-palette" id="color-palette">
               <!-- Populated by JS -->
             </div>
@@ -68,22 +72,22 @@
             </div>
 
             <div class="flex gap-8 mt-12">
-              <button class="btn btn-outline btn-sm" id="btn-fill-random" style="flex:1">🎲 Random</button>
-              <button class="btn btn-outline btn-sm" id="btn-clear-grid" style="flex:1">🗑️ Clear</button>
+              <button class="btn btn-outline btn-sm" id="btn-fill-random" style="flex:1">Random</button>
+              <button class="btn btn-outline btn-sm" id="btn-clear-grid" style="flex:1">Clear</button>
             </div>
           </div>
 
           <!-- Image Input Tab -->
           <div class="tab-content" data-tab="image" id="tab-image">
             <!-- Template Gallery -->
-            <div class="card-title mt-12"><span class="icon">🧩</span> Reference Templates</div>
+            <div class="card-title mt-12">Reference Templates</div>
             <div id="template-gallery" class="template-gallery">
               <p class="text-sm text-muted">Loading templates from imgs/...</p>
             </div>
             <div id="template-status" class="text-sm text-muted mt-12"></div>
 
             <div class="upload-zone mt-16" id="upload-zone">
-              <span class="upload-icon">📸</span>
+              <span class="upload-icon"></span>
               <p class="upload-text"><strong>Click or drag</strong> a screenshot here</p>
               <input type="file" id="file-input" accept="image/*">
             </div>
@@ -104,17 +108,17 @@
                 </div>
               </div>
               <p class="text-sm text-muted mt-12">Draw a rectangle over the grid area, then click Detect.</p>
-              <button class="btn btn-primary btn-sm btn-block mt-12" id="btn-detect">🔍 Detect Grid</button>
+              <button class="btn btn-primary btn-sm btn-block mt-12" id="btn-detect">Detect Grid</button>
             </div>
           </div>
         </div>
 
         <!-- Solver Controls -->
         <div class="card">
-          <div class="card-title"><span class="icon">🧠</span> Solver</div>
+          <div class="card-title">Solver</div>
           <div class="solver-controls">
             <button class="btn btn-success btn-block" id="btn-solve" disabled>
-              ⚡ Solve
+              Solve
             </button>
           </div>
           <div class="solver-controls mt-12">
@@ -123,7 +127,7 @@
               <input type="number" id="time-limit" min="1" max="300" value="30">
               <span class="text-sm text-muted">sec</span>
             </div>
-            <button class="btn btn-danger btn-sm hidden" id="btn-abort">⏹ Abort</button>
+            <button class="btn btn-danger btn-sm hidden" id="btn-abort">Abort</button>
           </div>
 
           <!-- Progress -->
@@ -149,7 +153,7 @@
 
         <!-- Grid Display -->
         <div class="card">
-          <div class="card-title"><span class="icon">🎮</span> Game Board</div>
+          <div class="card-title">Game Board</div>
           <div class="grid-canvas-wrapper" id="grid-canvas-wrapper">
             <canvas id="grid-canvas"></canvas>
           </div>
@@ -158,7 +162,7 @@
         <!-- Solution -->
         <div class="card solution-section" id="solution-section">
           <div class="solution-header">
-            <div class="card-title" style="margin-bottom:0"><span class="icon">✨</span> Solution</div>
+            <div class="card-title" style="margin-bottom:0">Solution</div>
             <div id="solution-badge"></div>
           </div>
 
@@ -188,7 +192,7 @@
   <!-- Tutorial Modal -->
   <div id="tutorial-modal" class="modal-overlay">
     <div class="modal-content card">
-      <h2 class="card-title">📖 How to Use</h2>
+      <h2 class="card-title">How to Use</h2>
       <div class="modal-body">
         <p><strong>Option 1: Image Recognition</strong></p>
         <ul>
@@ -220,7 +224,7 @@
 
   <!-- Toast Notification -->
   <div id="github-toast" class="toast">
-    <p>⭐ Like this project? Star it on GitHub or report bugs!</p>
+    <p>Like this project? Star it on GitHub or report bugs!</p>
     <div class="toast-actions">
       <a href="https://github.com/Jokskuyy/tap-titan-critter-heaven" target="_blank" class="btn btn-sm btn-primary">Go to GitHub</a>
       <button id="btn-close-toast" class="btn btn-sm btn-outline">Dismiss</button>
