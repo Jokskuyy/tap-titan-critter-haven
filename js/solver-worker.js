@@ -1,5 +1,5 @@
 /**
- * Critter Heaven Bot — Solver Web Worker
+ * Critter Haven Bot — Solver Web Worker
  * DFS solver with pruning, memoization, and greedy fallback.
  * 
  * Messages IN:  { type: 'solve', grid: number[][], timeLimit: number }

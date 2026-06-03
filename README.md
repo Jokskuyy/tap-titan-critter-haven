@@ -1,6 +1,6 @@
-# Tap Titan Critter Heaven Bot
+# Tap Titan Critter Haven Bot
 
-Local web-based solver for Tap Titans 2 "Critter Heaven" minigame. 
+Local web-based solver for Tap Titans 2 "Critter Haven" minigame. 
 Calculates optimal block-matching sequence to clear the board with minimum taps.
 
 ## Features

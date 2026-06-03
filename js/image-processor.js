@@ -1,5 +1,5 @@
 /**
- * Critter Heaven Bot — Image Processor v2
+ * Critter Haven Bot — Image Processor v2
  * Template matching using reference block images.
  * 
  * Approach: for each grid cell in the screenshot, resize + compare against

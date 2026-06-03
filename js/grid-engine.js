@@ -1,5 +1,5 @@
 /**
- * Critter Heaven Bot — Grid Engine
+ * Critter Haven Bot — Grid Engine
  * Pure game logic functions for the block-matching puzzle.
  * 
  * Grid representation: 2D array grid[row][col] = blockType (integer)
