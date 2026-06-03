@@ -138,6 +138,24 @@ header h1 {
   -webkit-text-fill-color: transparent;
   background-clip: text;
   letter-spacing: -0.02em;
+  margin-bottom: 0;
+}
+
+.header-title-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.header-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  image-rendering: pixelated;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
 header .subtitle {
@@ -157,6 +175,18 @@ header .subtitle {
 @media (max-width: 900px) {
   .main-layout {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  header h1 {
+    font-size: 1.6rem;
+    text-align: center;
+  }
+  
+  .header-title-container {
+    flex-direction: column;
+    gap: 8px;
   }
 }
 
