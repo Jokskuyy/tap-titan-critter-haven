@@ -153,8 +153,7 @@ export class UIController {
   buildManualGrid() {
     this.state.gridRows = parseInt($('input-rows').value) || 7;
     this.state.gridCols = parseInt($('input-cols').value) || 7;
-    const typesEl = $('input-types');
-    this.state.numTypes = typesEl ? parseInt(typesEl.value) : 5;
+    this.state.numTypes = 24; // Always 24 types available in palette
     this.state.grid = GridEngine.createGrid(this.state.gridRows, this.state.gridCols);
     this.state.originalGrid = GridEngine.cloneGrid(this.state.grid);
     this.state.selectedType = 1;
@@ -381,31 +380,9 @@ export class UIController {
 
   setupSolver() {
     $('btn-build-grid').addEventListener('click', () => this.buildManualGrid());
-    $('btn-fill-random').addEventListener('click', () => this.fillRandom());
     $('btn-clear-grid').addEventListener('click', () => this.clearGrid());
     $('btn-solve').addEventListener('click', () => this.startSolve());
     $('btn-abort').addEventListener('click', () => this.abortSolve());
-  }
-
-  fillRandom() {
-    this.state.gridRows = parseInt($('input-rows').value) || 7;
-    this.state.gridCols = parseInt($('input-cols').value) || 7;
-    const typesEl = $('input-types');
-    this.state.numTypes = typesEl ? parseInt(typesEl.value) : 5;
-    this.state.grid = [];
-    for (let r = 0; r < this.state.gridRows; r++) {
-      const row = [];
-      for (let c = 0; c < this.state.gridCols; c++) {
-        row.push(Math.floor(Math.random() * this.state.numTypes) + 1);
-      }
-      this.state.grid.push(row);
-    }
-    this.state.originalGrid = GridEngine.cloneGrid(this.state.grid);
-    this.buildPalette();
-    this.renderManualGrid();
-    this.renderer.render(this.state);
-    this.updateSolveButton();
-    this.clearSolution();
   }
 
   clearGrid() {
