@@ -482,6 +482,50 @@ header .subtitle {
   font-size: 1rem;
 }
 
+/* ---- Template Gallery ---- */
+.template-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.template-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-glass);
+  background: var(--bg-tertiary);
+  transition: all var(--transition-fast);
+  cursor: default;
+  width: 52px;
+}
+
+.template-item:hover {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.template-item img {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  image-rendering: pixelated;
+}
+
+.template-label {
+  font-size: 0.55rem;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.1;
+  max-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- Main Content ---- */
 .main-content {
   display: flex;

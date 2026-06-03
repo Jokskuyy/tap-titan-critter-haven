@@ -1,12 +1,16 @@
 /**
- * Critter Heaven Bot — Image Processor
- * Screenshot → Grid matrix via color sampling + k-means clustering.
+ * Critter Heaven Bot — Image Processor v2
+ * Template matching using reference block images.
+ * 
+ * Approach: for each grid cell in the screenshot, resize + compare against
+ * all reference templates using normalized color histogram similarity.
+ * Pick the best match above a threshold.
  */
 
 const ImageProcessor = (() => {
 
   /**
-   * Load image from File object → HTMLImageElement.
+   * Load image from File → HTMLImageElement.
    */
   function loadImage(file) {
     return new Promise((resolve, reject) => {
@@ -18,11 +22,12 @@ const ImageProcessor = (() => {
   }
 
   /**
-   * Load image from URL string → HTMLImageElement.
+   * Load image from URL → HTMLImageElement.
    */
   function loadImageFromURL(url) {
     return new Promise((resolve, reject) => {
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       img.onload = () => resolve(img);
       img.onerror = reject;
       img.src = url;
@@ -30,231 +35,243 @@ const ImageProcessor = (() => {
   }
 
   /**
-   * Sample pixel color at center of each grid cell.
-   * cropRect: { x, y, width, height } — area of screenshot containing grid
-   * rows, cols: grid dimensions
-   * Returns 2D array of [r, g, b] values.
+   * Extract pixel data from an image region, resized to a standard size.
+   * Returns { data: Uint8ClampedArray, width, height }
    */
-  function sampleColors(img, cropRect, rows, cols) {
+  function extractRegion(img, x, y, w, h, targetSize = 32) {
     const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
+    canvas.width = targetSize;
+    canvas.height = targetSize;
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(img, x, y, w, h, 0, 0, targetSize, targetSize);
+    return ctx.getImageData(0, 0, targetSize, targetSize);
+  }
+
+  /**
+   * Extract pixel data from a canvas region.
+   */
+  function extractFromCanvas(sourceCanvas, x, y, w, h, targetSize = 32) {
+    const canvas = document.createElement('canvas');
+    canvas.width = targetSize;
+    canvas.height = targetSize;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(sourceCanvas, x, y, w, h, 0, 0, targetSize, targetSize);
+    return ctx.getImageData(0, 0, targetSize, targetSize);
+  }
+
+  /**
+   * Build a color histogram from ImageData (RGB, 8 bins per channel).
+   * Returns Float64Array of length 512 (8^3 bins), normalized.
+   */
+  function buildHistogram(imageData) {
+    const bins = 8;
+    const hist = new Float64Array(bins * bins * bins);
+    const data = imageData.data;
+    let total = 0;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = Math.min(bins - 1, Math.floor(data[i] / 32));
+      const g = Math.min(bins - 1, Math.floor(data[i + 1] / 32));
+      const b = Math.min(bins - 1, Math.floor(data[i + 2] / 32));
+      const a = data[i + 3];
+      if (a < 128) continue; // skip transparent
+      hist[r * bins * bins + g * bins + b]++;
+      total++;
+    }
+
+    // Normalize
+    if (total > 0) {
+      for (let i = 0; i < hist.length; i++) {
+        hist[i] /= total;
+      }
+    }
+
+    return hist;
+  }
+
+  /**
+   * Compare two histograms using Bhattacharyya coefficient.
+   * Returns value between 0 (no match) and 1 (identical).
+   */
+  function compareHistograms(h1, h2) {
+    let sum = 0;
+    for (let i = 0; i < h1.length; i++) {
+      sum += Math.sqrt(h1[i] * h2[i]);
+    }
+    return sum; // already normalized
+  }
+
+  /**
+   * Compute Mean Squared Error between two ImageData objects.
+   * Lower = more similar. Compares center 60% of the image to avoid edge artifacts.
+   */
+  function computeMSE(imgData1, imgData2) {
+    const w = imgData1.width;
+    const h = imgData1.height;
+    const d1 = imgData1.data;
+    const d2 = imgData2.data;
+    
+    // Compare center region (skip edges which may have background)
+    const marginX = Math.floor(w * 0.2);
+    const marginY = Math.floor(h * 0.2);
+    let totalError = 0;
+    let count = 0;
+
+    for (let y = marginY; y < h - marginY; y++) {
+      for (let x = marginX; x < w - marginX; x++) {
+        const idx = (y * w + x) * 4;
+        const dr = d1[idx] - d2[idx];
+        const dg = d1[idx + 1] - d2[idx + 1];
+        const db = d1[idx + 2] - d2[idx + 2];
+        totalError += dr * dr + dg * dg + db * db;
+        count++;
+      }
+    }
+
+    return count > 0 ? totalError / count : Infinity;
+  }
+
+  /**
+   * Prepare a reference template from an image.
+   * Returns { name, img, histogram, imageData }
+   */
+  async function prepareTemplate(url, name, targetSize = 32) {
+    const img = await loadImageFromURL(url);
+    const canvas = document.createElement('canvas');
+    canvas.width = targetSize;
+    canvas.height = targetSize;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, targetSize, targetSize);
+    const imageData = ctx.getImageData(0, 0, targetSize, targetSize);
+    const histogram = buildHistogram(imageData);
+    return { name, img, histogram, imageData };
+  }
+
+  /**
+   * Load all reference templates from the imgs/ directory.
+   * fileList: array of { url, name } objects
+   */
+  async function loadTemplates(fileList, targetSize = 32) {
+    const templates = [];
+    for (const file of fileList) {
+      try {
+        const template = await prepareTemplate(file.url, file.name, targetSize);
+        templates.push(template);
+      } catch (err) {
+        console.warn(`Failed to load template: ${file.name}`, err);
+      }
+    }
+    return templates;
+  }
+
+  /**
+   * Match a grid cell against all templates.
+   * Uses histogram comparison first (fast filter), then MSE for top candidates.
+   * Returns { bestMatch: templateIndex, confidence: number, name: string }
+   */
+  function matchCell(cellImageData, templates, targetSize = 32) {
+    const cellHist = buildHistogram(cellImageData);
+
+    // Score all templates by histogram similarity
+    const scores = templates.map((t, idx) => ({
+      idx,
+      histScore: compareHistograms(cellHist, t.histogram),
+      name: t.name
+    }));
+
+    // Sort by histogram score (descending)
+    scores.sort((a, b) => b.histScore - a.histScore);
+
+    // Refine top 5 with MSE
+    const topN = Math.min(5, scores.length);
+    let bestIdx = scores[0].idx;
+    let bestMSE = Infinity;
+    let bestHistScore = scores[0].histScore;
+
+    for (let i = 0; i < topN; i++) {
+      const mse = computeMSE(cellImageData, templates[scores[i].idx].imageData);
+      if (mse < bestMSE) {
+        bestMSE = mse;
+        bestIdx = scores[i].idx;
+        bestHistScore = scores[i].histScore;
+      }
+    }
+
+    return {
+      bestMatch: bestIdx,
+      confidence: bestHistScore,
+      mse: bestMSE,
+      name: templates[bestIdx].name
+    };
+  }
+
+  /**
+   * Full pipeline: screenshot + crop rect + grid dims + templates → grid matrix.
+   * Returns { grid: number[][], matchDetails: object[][] }
+   */
+  function processImage(img, cropRect, rows, cols, templates, targetSize = 32) {
+    // Draw full image to a source canvas
+    const srcCanvas = document.createElement('canvas');
+    srcCanvas.width = img.width;
+    srcCanvas.height = img.height;
+    const srcCtx = srcCanvas.getContext('2d');
+    srcCtx.drawImage(img, 0, 0);
 
     const cellW = cropRect.width / cols;
     const cellH = cropRect.height / rows;
-    const colors = [];
+
+    const grid = [];
+    const matchDetails = [];
 
     for (let r = 0; r < rows; r++) {
-      const rowColors = [];
+      const gridRow = [];
+      const detailRow = [];
       for (let c = 0; c < cols; c++) {
-        // Sample 3x3 area at cell center for more robust color
-        const cx = Math.floor(cropRect.x + c * cellW + cellW / 2);
-        const cy = Math.floor(cropRect.y + r * cellH + cellH / 2);
-        const samples = [];
+        // Extract cell with slight inset to avoid grid lines
+        const inset = Math.max(1, Math.floor(Math.min(cellW, cellH) * 0.08));
+        const cx = cropRect.x + c * cellW + inset;
+        const cy = cropRect.y + r * cellH + inset;
+        const cw = cellW - inset * 2;
+        const ch = cellH - inset * 2;
 
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            const pixel = ctx.getImageData(cx + dx, cy + dy, 1, 1).data;
-            samples.push([pixel[0], pixel[1], pixel[2]]);
-          }
-        }
+        const cellData = extractFromCanvas(srcCanvas, cx, cy, cw, ch, targetSize);
+        const match = matchCell(cellData, templates, targetSize);
 
-        // Average the samples
-        const avg = [0, 0, 0];
-        for (const s of samples) {
-          avg[0] += s[0]; avg[1] += s[1]; avg[2] += s[2];
-        }
-        avg[0] = Math.round(avg[0] / samples.length);
-        avg[1] = Math.round(avg[1] / samples.length);
-        avg[2] = Math.round(avg[2] / samples.length);
-
-        rowColors.push(avg);
+        // Template index + 1 (0 = empty)
+        gridRow.push(match.bestMatch + 1);
+        detailRow.push(match);
       }
-      colors.push(rowColors);
+      grid.push(gridRow);
+      matchDetails.push(detailRow);
     }
 
-    return colors;
-  }
-
-  /**
-   * Euclidean distance between two RGB colors.
-   */
-  function colorDistance(a, b) {
-    return Math.sqrt(
-      (a[0] - b[0]) ** 2 +
-      (a[1] - b[1]) ** 2 +
-      (a[2] - b[2]) ** 2
-    );
-  }
-
-  /**
-   * K-Means clustering on RGB colors.
-   * Returns { labels: 2D array of cluster IDs, centroids: array of [r,g,b] }
-   */
-  function kMeansClustering(colors2D, k, maxIter = 30) {
-    // Flatten colors
-    const rows = colors2D.length;
-    const cols = colors2D[0].length;
-    const flat = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        flat.push(colors2D[r][c]);
-      }
-    }
-
-    // Initialize centroids using k-means++ style
-    const centroids = [];
-    centroids.push([...flat[Math.floor(Math.random() * flat.length)]]);
-
-    for (let i = 1; i < k; i++) {
-      const distances = flat.map(color => {
-        const minDist = Math.min(...centroids.map(c => colorDistance(color, c)));
-        return minDist * minDist;
-      });
-      const totalDist = distances.reduce((a, b) => a + b, 0);
-      let rnd = Math.random() * totalDist;
-      let idx = 0;
-      for (let j = 0; j < distances.length; j++) {
-        rnd -= distances[j];
-        if (rnd <= 0) { idx = j; break; }
-      }
-      centroids.push([...flat[idx]]);
-    }
-
-    // Iterate
-    let assignments = new Array(flat.length).fill(0);
-
-    for (let iter = 0; iter < maxIter; iter++) {
-      // Assign each point to nearest centroid
-      let changed = false;
-      for (let i = 0; i < flat.length; i++) {
-        let minDist = Infinity;
-        let bestCluster = 0;
-        for (let j = 0; j < k; j++) {
-          const d = colorDistance(flat[i], centroids[j]);
-          if (d < minDist) {
-            minDist = d;
-            bestCluster = j;
-          }
-        }
-        if (assignments[i] !== bestCluster) {
-          assignments[i] = bestCluster;
-          changed = true;
-        }
-      }
-
-      if (!changed) break;
-
-      // Update centroids
-      for (let j = 0; j < k; j++) {
-        const members = flat.filter((_, idx) => assignments[idx] === j);
-        if (members.length === 0) continue;
-        centroids[j] = [
-          Math.round(members.reduce((s, c) => s + c[0], 0) / members.length),
-          Math.round(members.reduce((s, c) => s + c[1], 0) / members.length),
-          Math.round(members.reduce((s, c) => s + c[2], 0) / members.length)
-        ];
-      }
-    }
-
-    // Reshape labels to 2D
-    const labels = [];
-    let idx = 0;
-    for (let r = 0; r < rows; r++) {
-      const row = [];
-      for (let c = 0; c < cols; c++) {
-        row.push(assignments[idx++] + 1); // +1 because 0 = empty
-      }
-      labels.push(row);
-    }
-
-    return { labels, centroids };
-  }
-
-  /**
-   * Auto-detect number of clusters using silhouette-like heuristic.
-   * Tests k from 2 to maxK and picks the one with best intra-cluster tightness.
-   */
-  function detectOptimalK(colors2D, maxK = 8) {
-    const rows = colors2D.length;
-    const cols = colors2D[0].length;
-    const flat = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        flat.push(colors2D[r][c]);
-      }
-    }
-
-    let bestK = 3;
-    let bestScore = Infinity;
-
-    for (let k = 2; k <= Math.min(maxK, flat.length); k++) {
-      // Run k-means multiple times, pick best
-      let bestInertia = Infinity;
-      for (let trial = 0; trial < 3; trial++) {
-        const result = kMeansClustering(colors2D, k);
-        // Calculate inertia (sum of squared distances to centroid)
-        let inertia = 0;
-        let idx = 0;
-        for (let r = 0; r < rows; r++) {
-          for (let c = 0; c < cols; c++) {
-            const cluster = result.labels[r][c] - 1;
-            inertia += colorDistance(colors2D[r][c], result.centroids[cluster]) ** 2;
-            idx++;
-          }
-        }
-        bestInertia = Math.min(bestInertia, inertia);
-      }
-
-      // Elbow method: penalize additional clusters
-      const penalty = k * 500;
-      const score = bestInertia + penalty;
-
-      if (score < bestScore) {
-        bestScore = score;
-        bestK = k;
-      }
-    }
-
-    return bestK;
-  }
-
-  /**
-   * Full pipeline: image + crop + grid dims → grid matrix + color map.
-   */
-  function processImage(img, cropRect, rows, cols, numTypes = null) {
-    const colors = sampleColors(img, cropRect, rows, cols);
-    const k = numTypes || detectOptimalK(colors);
-    const { labels, centroids } = kMeansClustering(colors, k);
-
-    // Sort centroids by brightness for consistent ordering
-    const sortedIndices = centroids
-      .map((c, i) => ({ brightness: c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114, idx: i }))
-      .sort((a, b) => a.brightness - b.brightness)
-      .map(x => x.idx);
-
-    // Remap labels
+    // Remap: find unique template indices used, assign sequential IDs
+    const usedIndices = [...new Set(grid.flat())].sort((a, b) => a - b);
     const remap = {};
-    sortedIndices.forEach((oldIdx, newIdx) => { remap[oldIdx + 1] = newIdx + 1; });
-    const remappedLabels = labels.map(row => row.map(v => remap[v]));
-    const remappedCentroids = sortedIndices.map(i => centroids[i]);
+    usedIndices.forEach((val, i) => { remap[val] = i + 1; });
+
+    const remappedGrid = grid.map(row => row.map(v => remap[v]));
 
     return {
-      grid: remappedLabels,
-      colorMap: remappedCentroids,
-      k
+      grid: remappedGrid,
+      matchDetails,
+      usedTemplates: usedIndices.map(i => templates[i - 1]),
+      templateRemap: remap,
+      numTypes: usedIndices.length
     };
   }
 
   return {
     loadImage,
     loadImageFromURL,
-    sampleColors,
-    kMeansClustering,
-    detectOptimalK,
-    processImage
+    prepareTemplate,
+    loadTemplates,
+    matchCell,
+    processImage,
+    // Keep old methods for backward compat
+    buildHistogram,
+    compareHistograms,
+    computeMSE
   };
 
 })();

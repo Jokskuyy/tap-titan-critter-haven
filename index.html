@@ -68,7 +68,14 @@
 
           <!-- Image Input Tab -->
           <div class="tab-content" data-tab="image" id="tab-image">
-            <div class="upload-zone mt-12" id="upload-zone">
+            <!-- Template Gallery -->
+            <div class="card-title mt-12"><span class="icon">🧩</span> Reference Templates</div>
+            <div id="template-gallery" class="template-gallery">
+              <p class="text-sm text-muted">Loading templates from imgs/...</p>
+            </div>
+            <div id="template-status" class="text-sm text-muted mt-12"></div>
+
+            <div class="upload-zone mt-16" id="upload-zone">
               <span class="upload-icon">📸</span>
               <p class="upload-text"><strong>Click or drag</strong> a screenshot here</p>
               <input type="file" id="file-input" accept="image/*">
@@ -87,10 +94,6 @@
                 <div class="form-group">
                   <label for="img-cols">Cols</label>
                   <input type="number" id="img-cols" min="2" max="12" value="7">
-                </div>
-                <div class="form-group">
-                  <label for="img-types">Types (auto)</label>
-                  <input type="number" id="img-types" min="2" max="10" value="" placeholder="auto">
                 </div>
               </div>
               <p class="text-sm text-muted mt-12">Draw a rectangle over the grid area, then click Detect.</p>
@@ -220,6 +223,14 @@
       let isCropping = false;
       let cropStart = null;
 
+      // Template matching state
+      let templates = [];
+      const TEMPLATE_FILES = [
+        'TT2_Bone', 'TT2_BowTie', 'TT2_CandyCane', 'TT2_CatFood', 'TT2_Cherry',
+        'TT2_EyeGlass', 'TT2_Grape', 'TT2_GreenFlower', 'TT2_HoneyComb', 'TT2_Leaf',
+        'TT2_Mushroom', 'TT2_Onion', 'TT2_Pepper', 'TT2_RedTie', 'TT2_Starfish'
+      ];
+
       // ---- DOM Refs ----
       const $ = id => document.getElementById(id);
 
@@ -242,6 +253,51 @@
         setupSolver();
         setupPlayback();
         renderGrid();
+        loadTemplates();
+      }
+
+      // ---- Template Loading ----
+      async function loadTemplates() {
+        const gallery = $('template-gallery');
+        const status = $('template-status');
+
+        const fileList = TEMPLATE_FILES.map(name => ({
+          url: `imgs/${name}.png`,
+          name: name.replace('TT2_', '')
+        }));
+
+        try {
+          templates = await ImageProcessor.loadTemplates(fileList, 32);
+          renderTemplateGallery();
+          status.textContent = `${templates.length} templates loaded`;
+          status.style.color = 'var(--accent-success)';
+        } catch (err) {
+          status.textContent = 'Failed to load templates: ' + err.message;
+          status.style.color = 'var(--accent-danger)';
+        }
+      }
+
+      function renderTemplateGallery() {
+        const gallery = $('template-gallery');
+        gallery.innerHTML = '';
+
+        templates.forEach((t, i) => {
+          const item = document.createElement('div');
+          item.className = 'template-item';
+          item.title = t.name;
+
+          const imgEl = document.createElement('img');
+          imgEl.src = t.img.src;
+          imgEl.alt = t.name;
+          item.appendChild(imgEl);
+
+          const label = document.createElement('span');
+          label.className = 'template-label';
+          label.textContent = t.name;
+          item.appendChild(label);
+
+          gallery.appendChild(item);
+        });
       }
 
       // ---- Tabs ----
@@ -543,20 +599,22 @@
           showStatus('Upload an image first.', 'warning');
           return;
         }
+        if (templates.length === 0) {
+          showStatus('Templates not loaded yet. Wait or check imgs/ folder.', 'warning');
+          return;
+        }
 
         // If no crop rect, use full image
         const rect = cropRect || { x: 0, y: 0, width: cropImage.width, height: cropImage.height };
         const rows = parseInt($('img-rows').value) || 7;
         const cols = parseInt($('img-cols').value) || 7;
-        const typesVal = $('img-types').value.trim();
-        const types = typesVal ? parseInt(typesVal) : null;
 
         try {
-          const result = ImageProcessor.processImage(cropImage, rect, rows, cols, types);
+          const result = ImageProcessor.processImage(cropImage, rect, rows, cols, templates, 32);
           grid = result.grid;
           gridRows = rows;
           gridCols = cols;
-          numTypes = result.k;
+          numTypes = result.numTypes;
           originalGrid = GridEngine.cloneGrid(grid);
 
           // Update manual tab inputs
@@ -564,17 +622,29 @@
           $('input-cols').value = cols;
           $('input-types').value = numTypes;
 
+          // Log match details for debugging
+          console.log('Detection results:');
+          result.matchDetails.forEach((row, r) => {
+            row.forEach((match, c) => {
+              console.log(`[${r},${c}] → ${match.name} (hist: ${match.confidence.toFixed(3)}, MSE: ${match.mse.toFixed(0)})`);
+            });
+          });
+
+          // Show which templates were used
+          const usedNames = result.usedTemplates.map(t => t.name).join(', ');
+          showStatus(`Detected ${numTypes} types (${usedNames}) on ${rows}×${cols}. Verify in Manual tab.`, 'success');
+
           buildPalette();
           renderManualGrid();
           renderGrid();
           updateSolveButton();
           clearSolution();
-          showStatus(`Detected ${numTypes} block types on ${rows}×${cols} grid. Verify and correct if needed.`, 'success');
 
           // Switch to manual tab for editing
           tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === 'manual'));
           tabContents.forEach(c => c.classList.toggle('active', c.dataset.tab === 'manual'));
         } catch (err) {
+          console.error('Detection error:', err);
           showStatus('Detection failed: ' + err.message, 'error');
         }
       }
