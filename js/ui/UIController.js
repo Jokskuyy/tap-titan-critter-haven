@@ -45,7 +45,7 @@ export class UIController {
 
     const fileList = TEMPLATE_FILES.map(name => ({
       url: `imgs/${name}.png`,
-      name: name.replace('Pet', 'Pet ').replace('Item', '')
+      name: name.replace('TT2_', '')
     }));
 
     // Skeleton loader
