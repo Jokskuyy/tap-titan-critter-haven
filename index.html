@@ -483,8 +483,19 @@
               // Block — try drawing template image
               const tpl = activeTemplateMap[type];
               
-              // Clip rounded rect
               gridCtx.save();
+              
+              // Highlight styling: dim others, glow target
+              if (highlightCells && highlightCells.length > 0) {
+                if (!isHighlighted) {
+                  gridCtx.globalAlpha = 0.3; // Dim non-highlighted
+                } else {
+                  gridCtx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+                  gridCtx.shadowBlur = 20; // Glow effect
+                }
+              }
+
+              // Clip rounded rect
               gridCtx.beginPath();
               gridCtx.roundRect(x, y, cellSize, cellSize, radius);
               gridCtx.clip();
@@ -508,21 +519,32 @@
 
               gridCtx.restore();
 
-              // Highlight border
+              // Highlight border & tap crosshair
               if (isHighlighted) {
-                gridCtx.strokeStyle = isTap ? '#ffffff' : 'rgba(255,255,255,0.6)';
-                gridCtx.lineWidth = isTap ? 3 : 2;
+                gridCtx.strokeStyle = isTap ? '#ffffff' : 'rgba(255,255,255,0.8)';
+                gridCtx.lineWidth = isTap ? 4 : 2;
                 gridCtx.beginPath();
                 gridCtx.roundRect(x + 1, y + 1, cellSize - 2, cellSize - 2, radius);
                 gridCtx.stroke();
 
                 if (isTap) {
-                  // Tap indicator — pulsing ring
-                  gridCtx.strokeStyle = 'rgba(255,255,255,0.3)';
-                  gridCtx.lineWidth = 1;
+                  // Tap indicator — crosshair
+                  gridCtx.strokeStyle = '#ef4444'; // Red crosshair for visibility
+                  gridCtx.lineWidth = 3;
                   gridCtx.beginPath();
-                  gridCtx.roundRect(x - 2, y - 2, cellSize + 4, cellSize + 4, radius + 2);
+                  // Horizontal line
+                  gridCtx.moveTo(x - 5, y + cellSize / 2);
+                  gridCtx.lineTo(x + cellSize + 5, y + cellSize / 2);
+                  // Vertical line
+                  gridCtx.moveTo(x + cellSize / 2, y - 5);
+                  gridCtx.lineTo(x + cellSize / 2, y + cellSize + 5);
                   gridCtx.stroke();
+                  
+                  // Center dot
+                  gridCtx.fillStyle = '#ffffff';
+                  gridCtx.beginPath();
+                  gridCtx.arc(x + cellSize / 2, y + cellSize / 2, 4, 0, Math.PI * 2);
+                  gridCtx.fill();
                 }
               }
             }

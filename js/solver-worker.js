@@ -40,16 +40,31 @@ function solve(grid, timeLimit) {
     return;
   }
 
-  // First: run greedy to get an upper bound
+  // 1. Run greedy to get baseline
   const greedySolution = solveGreedy(grid);
   if (greedySolution) {
     bestSolution = greedySolution;
     bestTaps = greedySolution.length;
   }
 
-  // Then: DFS with branch-and-bound
-  const visited = new Map();
-  dfs(grid, [], visited);
+  // 2. Run Beam Search with iterative widening
+  let beamWidth = 10;
+  let clearedWithBeam = false;
+  while (performance.now() - startTime < timeLimitMs && beamWidth <= 1000) {
+    const beamSol = solveBeam(grid, beamWidth);
+    if (beamSol && beamSol.length < bestTaps) {
+      bestSolution = beamSol;
+      bestTaps = beamSol.length;
+      clearedWithBeam = true;
+    }
+    beamWidth *= 2; // Widen beam
+  }
+
+  // 3. DFS with branch-and-bound for exact optimal if time permits
+  if (performance.now() - startTime < timeLimitMs) {
+      const visited = new Map();
+      dfs(grid, [], visited);
+  }
 
   const elapsed = performance.now() - startTime;
   const timedOut = elapsed >= timeLimitMs;
@@ -61,7 +76,7 @@ function solve(grid, timeLimit) {
       taps: bestSolution.length,
       totalStates: statesExplored,
       time: Math.round(elapsed),
-      optimal: !timedOut
+      optimal: !timedOut && (bestTaps <= 3 || clearedWithBeam) // Rough optimality heuristic
     });
   } else {
     // No full clear found — return greedy partial
@@ -73,6 +88,76 @@ function solve(grid, timeLimit) {
       taps: partialSolution.length
     });
   }
+}
+
+/**
+ * Beam Search solver.
+ */
+function solveBeam(grid, beamWidth) {
+  let beam = [{
+    grid: GE.cloneGrid(grid),
+    moves: [],
+    score: 0,
+    remaining: GE.countRemaining(grid)
+  }];
+  
+  const visited = new Set();
+  visited.add(GE.hashGrid(grid));
+
+  while (beam.length > 0) {
+    if (performance.now() - startTime > timeLimitMs) return null;
+    
+    // Check if any state is cleared
+    for (const state of beam) {
+      if (state.remaining === 0) return state.moves;
+    }
+
+    let nextBeam = [];
+    let nextVisited = new Set(); // Reset visited per depth level (or keep global, but per depth is safer)
+
+    for (const state of beam) {
+      if (performance.now() - startTime > timeLimitMs) return null;
+      statesExplored++;
+
+      const moves = GE.getAvailableMoves(state.grid);
+      
+      for (const move of moves) {
+        const newGrid = GE.cloneGrid(state.grid);
+        GE.removeGroup(newGrid, move.cells);
+        GE.applyGravity(newGrid);
+        
+        const hash = GE.hashGrid(newGrid);
+        if (nextVisited.has(hash)) continue;
+        nextVisited.add(hash);
+        
+        const remaining = state.remaining - move.cells.length;
+        // Heuristic: lower remaining is better, fewer unique groups is better
+        const nextMoves = GE.getAvailableMoves(newGrid);
+        const score = remaining * 10 + nextMoves.length;
+
+        const moveRecord = {
+          tap: { row: move.tap.row, col: move.tap.col },
+          cells: move.cells.map(c => ({ row: c.row, col: c.col })),
+          type: move.type,
+          groupSize: move.cells.length,
+          gridAfter: newGrid
+        };
+
+        nextBeam.push({
+          grid: newGrid,
+          moves: [...state.moves, moveRecord],
+          score: score,
+          remaining: remaining
+        });
+      }
+    }
+
+    // Sort by score (lower is better) and prune to beamWidth
+    nextBeam.sort((a, b) => a.score - b.score);
+    beam = nextBeam.slice(0, beamWidth);
+  }
+  
+  return null;
 }
 
 /**
