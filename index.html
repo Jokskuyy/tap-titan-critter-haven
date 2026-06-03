@@ -223,6 +223,9 @@
       let isCropping = false;
       let cropStart = null;
 
+      // Active template map: grid value → { img, name }
+      let activeTemplateMap = {};
+
       // Template matching state
       let templates = [];
       const TEMPLATE_FILES = [
@@ -319,7 +322,7 @@
         const eraser = document.createElement('div');
         eraser.className = 'color-swatch eraser' + (selectedType === 0 ? ' active' : '');
         eraser.textContent = '✕';
-        eraser.title = 'Eraser';
+        eraser.title = 'Eraser (right-click cell)';
         eraser.addEventListener('click', () => {
           selectedType = 0;
           updatePaletteSelection();
@@ -329,9 +332,20 @@
         for (let i = 1; i <= numTypes; i++) {
           const swatch = document.createElement('div');
           swatch.className = 'color-swatch' + (selectedType === i ? ' active' : '');
-          swatch.style.background = BLOCK_COLORS[i] || '#888';
-          swatch.textContent = i;
-          swatch.title = `Type ${i}`;
+          const tpl = activeTemplateMap[i];
+          if (tpl && tpl.img) {
+            swatch.style.background = 'var(--bg-tertiary)';
+            const img = document.createElement('img');
+            img.src = tpl.img.src;
+            img.alt = tpl.name || i;
+            img.style.cssText = 'width:100%;height:100%;border-radius:6px;object-fit:cover;';
+            swatch.appendChild(img);
+            swatch.title = tpl.name || `Type ${i}`;
+          } else {
+            swatch.style.background = BLOCK_COLORS[i] || '#888';
+            swatch.textContent = i;
+            swatch.title = `Type ${i}`;
+          }
           swatch.addEventListener('click', () => {
             selectedType = i;
             updatePaletteSelection();
@@ -347,6 +361,14 @@
         });
       }
 
+      /** Build activeTemplateMap from first numTypes templates */
+      function buildDefaultTemplateMap() {
+        activeTemplateMap = {};
+        for (let i = 0; i < numTypes && i < templates.length; i++) {
+          activeTemplateMap[i + 1] = templates[i];
+        }
+      }
+
       // ---- Manual Grid ----
       function buildManualGrid() {
         gridRows = parseInt($('input-rows').value) || 7;
@@ -355,6 +377,7 @@
         grid = GridEngine.createGrid(gridRows, gridCols);
         originalGrid = GridEngine.cloneGrid(grid);
         selectedType = 1;
+        buildDefaultTemplateMap();
         buildPalette();
         renderManualGrid();
         renderGrid();
@@ -371,8 +394,19 @@
             const cell = document.createElement('div');
             cell.className = 'manual-grid-cell' + (grid[r][c] === 0 ? ' empty' : '');
             if (grid[r][c] !== 0) {
-              cell.style.background = BLOCK_COLORS[grid[r][c]] || '#888';
-              cell.textContent = grid[r][c];
+              const tpl = activeTemplateMap[grid[r][c]];
+              if (tpl && tpl.img) {
+                cell.style.background = 'transparent';
+                cell.style.padding = '2px';
+                const img = document.createElement('img');
+                img.src = tpl.img.src;
+                img.alt = tpl.name || grid[r][c];
+                img.style.cssText = 'width:100%;height:100%;border-radius:4px;object-fit:cover;';
+                cell.appendChild(img);
+              } else {
+                cell.style.background = BLOCK_COLORS[grid[r][c]] || '#888';
+                cell.textContent = grid[r][c];
+              }
             }
             cell.addEventListener('click', () => {
               grid[r][c] = selectedType;
@@ -446,26 +480,33 @@
               gridCtx.roundRect(x, y, cellSize, cellSize, radius);
               gridCtx.fill();
             } else {
-              // Block
-              const color = BLOCK_COLORS[type] || '#888';
-              gridCtx.fillStyle = color;
+              // Block — try drawing template image
+              const tpl = activeTemplateMap[type];
+              
+              // Clip rounded rect
+              gridCtx.save();
               gridCtx.beginPath();
               gridCtx.roundRect(x, y, cellSize, cellSize, radius);
-              gridCtx.fill();
+              gridCtx.clip();
 
-              // Glossy highlight
-              const gradient = gridCtx.createLinearGradient(x, y, x, y + cellSize);
-              gradient.addColorStop(0, 'rgba(255,255,255,0.2)');
-              gradient.addColorStop(0.5, 'rgba(255,255,255,0)');
-              gridCtx.fillStyle = gradient;
-              gridCtx.fill();
+              if (tpl && tpl.img) {
+                // Draw template image
+                gridCtx.drawImage(tpl.img, x, y, cellSize, cellSize);
+              } else {
+                // Fallback: colored block
+                const color = BLOCK_COLORS[type] || '#888';
+                gridCtx.fillStyle = color;
+                gridCtx.fillRect(x, y, cellSize, cellSize);
 
-              // Label
-              gridCtx.fillStyle = 'rgba(255,255,255,0.85)';
-              gridCtx.font = `bold ${Math.max(10, cellSize * 0.35)}px Inter, sans-serif`;
-              gridCtx.textAlign = 'center';
-              gridCtx.textBaseline = 'middle';
-              gridCtx.fillText(type, x + cellSize / 2, y + cellSize / 2);
+                // Label
+                gridCtx.fillStyle = 'rgba(255,255,255,0.85)';
+                gridCtx.font = `bold ${Math.max(10, cellSize * 0.35)}px Inter, sans-serif`;
+                gridCtx.textAlign = 'center';
+                gridCtx.textBaseline = 'middle';
+                gridCtx.fillText(type, x + cellSize / 2, y + cellSize / 2);
+              }
+
+              gridCtx.restore();
 
               // Highlight border
               if (isHighlighted) {
@@ -616,6 +657,12 @@
           gridCols = cols;
           numTypes = result.numTypes;
           originalGrid = GridEngine.cloneGrid(grid);
+
+          // Build active template map from detection results
+          activeTemplateMap = {};
+          result.usedTemplates.forEach((t, i) => {
+            activeTemplateMap[i + 1] = t;
+          });
 
           // Update manual tab inputs
           $('input-rows').value = rows;
