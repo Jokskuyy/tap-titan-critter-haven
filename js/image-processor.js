@@ -238,7 +238,7 @@ const ImageProcessor = (() => {
         const match = matchCell(cellData, templates, targetSize);
 
         const template = templates[match.bestMatch];
-        if (template.name === 'empty') {
+        if (template.name.startsWith('empty')) {
           gridRow.push(0);
         } else {
           gridRow.push(match.bestMatch + 1);

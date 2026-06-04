@@ -38,7 +38,7 @@ export const TEMPLATE_FILES = [
   'TT2_Mushroom', 'TT2_Onion', 'TT2_Oranges', 'TT2_Pear', 'TT2_Pepper', 'TT2_PurpleFlower', 
   'TT2_RedTie', 'TT2_Starfish', 'TT2_Tennis', 'TT2_Walnut', 'TT2_Yarn', 'TT2_Rambutan',
   'Pet4Item', 'Pet15Item', 'Pet19Item', 'Pet20Item', 'Pet21Item', 'Pet30Item',
-  'empty'
+  'empty', 'empty(2)', 'empty(3)'
 ];
 
 export class AppState {

@@ -81,7 +81,7 @@ export class UIController {
     gallery.innerHTML = '';
 
     this.state.templates.forEach((t) => {
-      if (t.name === 'empty') return;
+      if (t.name.startsWith('empty')) return;
       const item = document.createElement('div');
       item.className = 'template-item';
       item.title = t.name;
@@ -125,7 +125,7 @@ export class UIController {
     });
     paletteEl.appendChild(eraser);
 
-    const activeTemplates = this.state.templates.filter(t => t.name !== 'empty');
+    const activeTemplates = this.state.templates.filter(t => !t.name.startsWith('empty'));
     const totalSwatches = activeTemplates.length > 0 ? activeTemplates.length : this.state.numTypes;
 
     for (let i = 1; i <= totalSwatches; i++) {
@@ -162,7 +162,7 @@ export class UIController {
 
   buildDefaultTemplateMap() {
     this.state.activeTemplateMap = {};
-    const activeTemplates = this.state.templates.filter(t => t.name !== 'empty');
+    const activeTemplates = this.state.templates.filter(t => !t.name.startsWith('empty'));
     for (let i = 0; i < activeTemplates.length; i++) {
       this.state.activeTemplateMap[i + 1] = activeTemplates[i];
     }
@@ -171,7 +171,7 @@ export class UIController {
   buildManualGrid() {
     this.state.gridRows = parseInt($('input-rows').value) || 7;
     this.state.gridCols = parseInt($('input-cols').value) || 7;
-    this.state.numTypes = TEMPLATE_FILES.filter(n => n !== 'empty').length; // Always match template file count (excluding empty)
+    this.state.numTypes = TEMPLATE_FILES.filter(n => !n.startsWith('empty')).length; // Always match template file count (excluding empty)
     this.state.grid = GridEngine.createGrid(this.state.gridRows, this.state.gridCols);
     this.state.originalGrid = GridEngine.cloneGrid(this.state.grid);
     this.state.selectedType = 1;
@@ -375,7 +375,7 @@ export class UIController {
         this.state.activeTemplateMap[i + 1] = t;
       });
       // Fill the rest of the activeTemplateMap with unused templates (except 'empty') so they show as images instead of numbers
-      const activeTemplates = this.state.templates.filter(t => t.name !== 'empty');
+      const activeTemplates = this.state.templates.filter(t => !t.name.startsWith('empty'));
       const unusedTemplates = activeTemplates.filter(t => !result.usedTemplates.includes(t));
       unusedTemplates.forEach((t, i) => {
         this.state.activeTemplateMap[result.usedTemplates.length + 1 + i] = t;
