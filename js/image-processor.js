@@ -237,17 +237,22 @@ const ImageProcessor = (() => {
         const cellData = extractFromCanvas(srcCanvas, cx, cy, cw, ch, targetSize);
         const match = matchCell(cellData, templates, targetSize);
 
-        // Template index + 1 (0 = empty)
-        gridRow.push(match.bestMatch + 1);
+        const template = templates[match.bestMatch];
+        if (template.name === 'empty') {
+          gridRow.push(0);
+        } else {
+          gridRow.push(match.bestMatch + 1);
+        }
         detailRow.push(match);
       }
       grid.push(gridRow);
       matchDetails.push(detailRow);
     }
 
-    // Remap: find unique template indices used, assign sequential IDs
-    const usedIndices = [...new Set(grid.flat())].sort((a, b) => a - b);
+    // Remap: find unique template indices used, assign sequential IDs (skipping 0)
+    const usedIndices = [...new Set(grid.flat())].filter(v => v !== 0).sort((a, b) => a - b);
     const remap = {};
+    remap[0] = 0; // Empty stays empty
     usedIndices.forEach((val, i) => { remap[val] = i + 1; });
 
     const remappedGrid = grid.map(row => row.map(v => remap[v]));
