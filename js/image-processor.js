@@ -169,7 +169,10 @@ const ImageProcessor = (() => {
    * Uses histogram comparison first (fast filter), then MSE for top candidates.
    * Returns { bestMatch: templateIndex, confidence: number, name: string }
    */
-  function matchCell(cellImageData, templates, targetSize = 32) {
+  /**
+   * Internal match execution helper.
+   */
+  function runMatch(cellImageData, templates, targetSize = 32) {
     const cellHist = buildHistogram(cellImageData);
 
     // Score all templates by histogram similarity
@@ -203,6 +206,34 @@ const ImageProcessor = (() => {
       mse: bestMSE,
       name: templates[bestIdx].name
     };
+  }
+
+  /**
+   * Match a grid cell against all templates.
+   * Uses histogram comparison first (fast filter), then MSE for top candidates.
+   * Special logic: if match is 'empty' but MSE is high, it falls back to non-empty blocks.
+   * Returns { bestMatch: templateIndex, confidence: number, name: string }
+   */
+  function matchCell(cellImageData, templates, targetSize = 32) {
+    const result = runMatch(cellImageData, templates, targetSize);
+    
+    // Fallback if cell is classified as empty but has high MSE (meaning an icon exists in it)
+    const bestTemplate = templates[result.bestMatch];
+    if (bestTemplate.name.startsWith('empty') && result.mse > 2500) {
+      const nonEmptyTemplates = templates.filter(t => !t.name.startsWith('empty'));
+      if (nonEmptyTemplates.length > 0) {
+        const fallbackResult = runMatch(cellImageData, nonEmptyTemplates, targetSize);
+        const originalIdx = templates.findIndex(t => t.name === nonEmptyTemplates[fallbackResult.bestMatch].name);
+        return {
+          bestMatch: originalIdx,
+          confidence: fallbackResult.confidence,
+          mse: fallbackResult.mse,
+          name: templates[originalIdx].name
+        };
+      }
+    }
+    
+    return result;
   }
 
   /**
