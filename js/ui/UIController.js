@@ -266,19 +266,59 @@ export class UIController {
     });
   }
 
+  drawCropSelection(rect) {
+    const cropCanvas = $('crop-canvas');
+    const cropCtx = cropCanvas.getContext('2d');
+    if (!this.state.cropImage) return;
+
+    // Reset canvas to image
+    cropCtx.drawImage(this.state.cropImage, 0, 0);
+    if (!rect) return;
+
+    // Draw dashed selection rectangle
+    cropCtx.strokeStyle = '#6366f1';
+    cropCtx.lineWidth = 3;
+    cropCtx.setLineDash([8, 4]);
+    cropCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+    cropCtx.setLineDash([]);
+
+    // Draw dark overlay outside selection
+    cropCtx.fillStyle = 'rgba(0,0,0,0.4)';
+    cropCtx.fillRect(0, 0, this.state.cropImage.width, rect.y);
+    cropCtx.fillRect(0, rect.y + rect.height, this.state.cropImage.width, this.state.cropImage.height - (rect.y + rect.height));
+    cropCtx.fillRect(0, rect.y, rect.x, rect.height);
+    cropCtx.fillRect(rect.x + rect.width, rect.y, this.state.cropImage.width - (rect.x + rect.width), rect.height);
+  }
+
   async handleFile(file) {
     try {
       this.state.cropImage = await ImageProcessor.loadImage(file);
       const preview = $('crop-preview');
       preview.style.display = 'block';
       const cropCanvas = $('crop-canvas');
-      const cropCtx = cropCanvas.getContext('2d');
       cropCanvas.width = this.state.cropImage.width;
       cropCanvas.height = this.state.cropImage.height;
-      cropCtx.drawImage(this.state.cropImage, 0, 0);
+
+      const w = this.state.cropImage.width;
+      const h = this.state.cropImage.height;
       this.state.cropRect = null;
+
+      // Smart Auto-Crop for standard vertical screenshots
+      if (h / w > 1.3) {
+        this.state.cropRect = {
+          x: w * 0.05,
+          y: h * 0.28,
+          width: w * 0.90,
+          height: h * 0.37
+        };
+        this.drawCropSelection(this.state.cropRect);
+        this.showStatus('Auto-detected vertical screenshot. Tap Detect Grid or adjust selection.', 'success');
+      } else {
+        this.drawCropSelection(null);
+        this.showStatus('Image loaded. Draw a rectangle over the grid area.', 'info');
+      }
+
       $('image-grid-controls').style.display = 'block';
-      this.showStatus('Image loaded. Draw a rectangle over the grid area.', 'info');
     } catch (err) {
       this.showStatus('Failed to load image: ' + err.message, 'error');
     }
@@ -286,50 +326,44 @@ export class UIController {
 
   setupCrop() {
     const cropCanvas = $('crop-canvas');
-    const cropCtx = cropCanvas.getContext('2d');
 
-    cropCanvas.addEventListener('mousedown', e => {
+    const startCrop = (clientX, clientY) => {
       if (!this.state.cropImage) return;
       this.state.isCropping = true;
       const rect = cropCanvas.getBoundingClientRect();
       const scaleX = this.state.cropImage.width / rect.width;
       const scaleY = this.state.cropImage.height / rect.height;
       this.state.cropStart = {
-        x: (e.clientX - rect.left) * scaleX,
-        y: (e.clientY - rect.top) * scaleY
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
       };
-    });
+    };
 
-    cropCanvas.addEventListener('mousemove', e => {
+    const moveCrop = (clientX, clientY) => {
       if (!this.state.isCropping || !this.state.cropImage) return;
       const rect = cropCanvas.getBoundingClientRect();
       const scaleX = this.state.cropImage.width / rect.width;
       const scaleY = this.state.cropImage.height / rect.height;
-      const x = (e.clientX - rect.left) * scaleX;
-      const y = (e.clientY - rect.top) * scaleY;
+      const x = (clientX - rect.left) * scaleX;
+      const y = (clientY - rect.top) * scaleY;
 
-      cropCtx.drawImage(this.state.cropImage, 0, 0);
-      cropCtx.strokeStyle = '#6366f1';
-      cropCtx.lineWidth = 3;
-      cropCtx.setLineDash([8, 4]);
-      cropCtx.strokeRect(this.state.cropStart.x, this.state.cropStart.y, x - this.state.cropStart.x, y - this.state.cropStart.y);
-      cropCtx.setLineDash([]);
+      const currentRect = {
+        x: Math.min(this.state.cropStart.x, x),
+        y: Math.min(this.state.cropStart.y, y),
+        width: Math.abs(x - this.state.cropStart.x),
+        height: Math.abs(y - this.state.cropStart.y)
+      };
+      this.drawCropSelection(currentRect);
+    };
 
-      cropCtx.fillStyle = 'rgba(0,0,0,0.4)';
-      cropCtx.fillRect(0, 0, this.state.cropImage.width, this.state.cropStart.y);
-      cropCtx.fillRect(0, y, this.state.cropImage.width, this.state.cropImage.height - y);
-      cropCtx.fillRect(0, this.state.cropStart.y, this.state.cropStart.x, y - this.state.cropStart.y);
-      cropCtx.fillRect(x, this.state.cropStart.y, this.state.cropImage.width - x, y - this.state.cropStart.y);
-    });
-
-    cropCanvas.addEventListener('mouseup', e => {
+    const endCrop = (clientX, clientY) => {
       if (!this.state.isCropping || !this.state.cropImage) return;
       this.state.isCropping = false;
       const rect = cropCanvas.getBoundingClientRect();
       const scaleX = this.state.cropImage.width / rect.width;
       const scaleY = this.state.cropImage.height / rect.height;
-      const x = (e.clientX - rect.left) * scaleX;
-      const y = (e.clientY - rect.top) * scaleY;
+      const x = (clientX - rect.left) * scaleX;
+      const y = (clientY - rect.top) * scaleY;
 
       this.state.cropRect = {
         x: Math.min(this.state.cropStart.x, x),
@@ -340,10 +374,38 @@ export class UIController {
 
       if (this.state.cropRect.width < 20 || this.state.cropRect.height < 20) {
         this.state.cropRect = null;
-        cropCtx.drawImage(this.state.cropImage, 0, 0);
+        this.drawCropSelection(null);
         this.showStatus('Crop area too small. Draw a larger rectangle.', 'warning');
+      } else {
+        this.drawCropSelection(this.state.cropRect);
       }
-    });
+    };
+
+    cropCanvas.addEventListener('mousedown', e => startCrop(e.clientX, e.clientY));
+    cropCanvas.addEventListener('mousemove', e => moveCrop(e.clientX, e.clientY));
+    cropCanvas.addEventListener('mouseup', e => endCrop(e.clientX, e.clientY));
+
+    // Touch support (prevent scrolling during drag gesture on mobile)
+    cropCanvas.addEventListener('touchstart', e => {
+      if (e.touches.length > 0) {
+        e.preventDefault();
+        startCrop(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: false });
+
+    cropCanvas.addEventListener('touchmove', e => {
+      if (e.touches.length > 0) {
+        e.preventDefault();
+        moveCrop(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: false });
+
+    cropCanvas.addEventListener('touchend', e => {
+      if (e.changedTouches.length > 0) {
+        e.preventDefault();
+        endCrop(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+      }
+    }, { passive: false });
 
     $('btn-detect').addEventListener('click', () => this.detectGrid());
   }
