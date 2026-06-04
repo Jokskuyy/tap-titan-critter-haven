@@ -427,6 +427,9 @@ export class UIController {
 
     this.clearSolution();
     this.state.originalGrid = GridEngine.cloneGrid(this.state.grid);
+    this.state.bestSolutionSoFar = null;
+    this.state.bestTapsSoFar = null;
+    this.state.bestIsPartialSoFar = false;
 
     if (this.state.solverWorker) this.state.solverWorker.terminate();
     // Use string URL to prevent 404/resolution issues in mobile Safari
@@ -448,6 +451,10 @@ export class UIController {
         $('stat-time').textContent = (data.elapsed / 1000).toFixed(1) + 's';
         const progress = Math.min(90, (data.elapsed / timeLimit) * 100);
         $('progress-bar').style.width = progress + '%';
+      } else if (data.type === 'best_so_far') {
+        this.state.bestSolutionSoFar = data.moves;
+        this.state.bestTapsSoFar = data.taps;
+        this.state.bestIsPartialSoFar = data.partial || false;
       } else if (data.type === 'solution') {
         $('progress-bar').style.width = '100%';
         this.state.solution = data.moves;
@@ -474,8 +481,34 @@ export class UIController {
 
   abortSolve() {
     if (this.state.solverWorker) {
-      this.state.solverWorker.postMessage({ type: 'abort' });
+      this.state.solverWorker.terminate();
+      this.state.solverWorker = null;
     }
+
+    if (this.state.bestSolutionSoFar) {
+      this.state.solution = this.state.bestSolutionSoFar;
+      this.state.currentStep = 0;
+      if (this.state.bestIsPartialSoFar) {
+        this.showPartialSolution({
+          taps: this.state.bestTapsSoFar,
+          bestPartial: this.state.bestSolutionSoFar
+        });
+      } else {
+        const elapsedText = $('stat-time').textContent || '0s';
+        const statesText = $('stat-states').textContent || '0';
+        this.showSolution({
+          taps: this.state.bestTapsSoFar,
+          moves: this.state.bestSolutionSoFar,
+          optimal: false,
+          totalStates: parseInt(statesText.replace(/,/g, '')) || 0,
+          time: parseFloat(elapsedText) * 1000 || 0
+        });
+      }
+    } else {
+      this.showStatus('Aborted. No solution found.', 'warning');
+    }
+
+    this.solverDone();
   }
 
   solverDone() {

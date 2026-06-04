@@ -40,14 +40,19 @@ function solve(grid, timeLimit) {
     return;
   }
 
-  // 1. Run greedy to get baseline
+  // 1. Pre-calculate greedy partial to have an immediate fallback if aborted
+  const initialPartial = solveGreedyPartial(grid);
+  postMessage({ type: 'best_so_far', moves: initialPartial, taps: initialPartial.length, partial: true });
+
+  // 2. Run greedy to get baseline
   const greedySolution = solveGreedy(grid);
   if (greedySolution) {
     bestSolution = greedySolution;
     bestTaps = greedySolution.length;
+    postMessage({ type: 'best_so_far', moves: bestSolution, taps: bestTaps });
   }
 
-  // 2. Run Beam Search with iterative widening
+  // 3. Run Beam Search with iterative widening
   let beamWidth = 10;
   let clearedWithBeam = false;
   while (performance.now() - startTime < timeLimitMs && beamWidth <= 1000) {
@@ -56,6 +61,7 @@ function solve(grid, timeLimit) {
       bestSolution = beamSol;
       bestTaps = beamSol.length;
       clearedWithBeam = true;
+      postMessage({ type: 'best_so_far', moves: bestSolution, taps: bestTaps });
     }
     beamWidth *= 2; // Widen beam
   }
@@ -189,6 +195,7 @@ function dfs(grid, currentMoves, visited) {
     if (currentMoves.length < bestTaps) {
       bestTaps = currentMoves.length;
       bestSolution = currentMoves.map(m => ({ ...m }));
+      postMessage({ type: 'best_so_far', moves: bestSolution, taps: bestTaps });
     }
     return;
   }
