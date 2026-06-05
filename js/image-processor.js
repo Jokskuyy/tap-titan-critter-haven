@@ -185,8 +185,8 @@ const ImageProcessor = (() => {
     // Sort by histogram score (descending)
     scores.sort((a, b) => b.histScore - a.histScore);
 
-    // Refine top 5 with MSE
-    const topN = Math.min(5, scores.length);
+    // Refine top 8 with MSE (wider net → fewer missed blocks)
+    const topN = Math.min(8, scores.length);
     let bestIdx = scores[0].idx;
     let bestMSE = Infinity;
     let bestHistScore = scores[0].histScore;
@@ -209,31 +209,94 @@ const ImageProcessor = (() => {
   }
 
   /**
+   * Check if a cell's center region is mostly uniform green (empty slot indicator).
+   * Returns true if the cell has low color variance and dominant green channel.
+   */
+  function isUniformGreen(cellImageData) {
+    const d = cellImageData.data;
+    const w = cellImageData.width;
+    const h = cellImageData.height;
+    // Sample center 60%
+    const mx = Math.floor(w * 0.2);
+    const my = Math.floor(h * 0.2);
+    let sumR = 0, sumG = 0, sumB = 0;
+    let sumR2 = 0, sumG2 = 0, sumB2 = 0;
+    let count = 0;
+
+    for (let y = my; y < h - my; y++) {
+      for (let x = mx; x < w - mx; x++) {
+        const idx = (y * w + x) * 4;
+        const r = d[idx], g = d[idx + 1], b = d[idx + 2];
+        sumR += r; sumG += g; sumB += b;
+        sumR2 += r * r; sumG2 += g * g; sumB2 += b * b;
+        count++;
+      }
+    }
+
+    if (count === 0) return false;
+
+    const avgR = sumR / count, avgG = sumG / count, avgB = sumB / count;
+    const varR = sumR2 / count - avgR * avgR;
+    const varG = sumG2 / count - avgG * avgG;
+    const varB = sumB2 / count - avgB * avgB;
+    const totalVar = varR + varG + varB;
+
+    // Empty cells: green dominant, low variance (uniform background)
+    // Typical empty: avgG > avgR && avgG > avgB, totalVar < 800
+    return avgG > avgR && avgG > avgB && totalVar < 1200;
+  }
+
+  /**
    * Match a grid cell against all templates.
-   * Uses histogram comparison first (fast filter), then MSE for top candidates.
-   * Special logic: if match is 'empty' but MSE is high, it falls back to non-empty blocks.
+   * Strategy: "blocks-first" — match against non-empty templates first.
+   * Only classify as empty if block match MSE is very high AND cell looks like uniform green.
    * Returns { bestMatch: templateIndex, confidence: number, name: string }
    */
   function matchCell(cellImageData, templates, targetSize = 32) {
-    const result = runMatch(cellImageData, templates, targetSize);
-    
-    // Fallback if cell is classified as empty but has high MSE (meaning an icon exists in it)
-    const bestTemplate = templates[result.bestMatch];
-    if (bestTemplate.name.startsWith('empty') && result.mse > 2500) {
-      const nonEmptyTemplates = templates.filter(t => !t.name.startsWith('empty'));
-      if (nonEmptyTemplates.length > 0) {
-        const fallbackResult = runMatch(cellImageData, nonEmptyTemplates, targetSize);
-        const originalIdx = templates.findIndex(t => t.name === nonEmptyTemplates[fallbackResult.bestMatch].name);
+    // Separate templates into blocks and empties
+    const blockTemplates = [];
+    const emptyTemplates = [];
+    const blockToOrigIdx = [];
+    const emptyToOrigIdx = [];
+
+    templates.forEach((t, i) => {
+      if (t.name.startsWith('empty')) {
+        emptyTemplates.push(t);
+        emptyToOrigIdx.push(i);
+      } else {
+        blockTemplates.push(t);
+        blockToOrigIdx.push(i);
+      }
+    });
+
+    // Step 1: Match against blocks only
+    const blockResult = runMatch(cellImageData, blockTemplates, targetSize);
+    const blockOrigIdx = blockToOrigIdx[blockResult.bestMatch];
+
+    // Step 2: Decide if this is actually empty
+    // Only consider empty if: block MSE is high AND cell is uniform green
+    if (emptyTemplates.length > 0 && blockResult.mse > 1800 && isUniformGreen(cellImageData)) {
+      // Confirm with empty template match
+      const emptyResult = runMatch(cellImageData, emptyTemplates, targetSize);
+      // Empty wins only if its MSE is significantly better than the block match
+      if (emptyResult.mse < blockResult.mse * 0.7) {
+        const emptyOrigIdx = emptyToOrigIdx[emptyResult.bestMatch];
         return {
-          bestMatch: originalIdx,
-          confidence: fallbackResult.confidence,
-          mse: fallbackResult.mse,
-          name: templates[originalIdx].name
+          bestMatch: emptyOrigIdx,
+          confidence: emptyResult.confidence,
+          mse: emptyResult.mse,
+          name: templates[emptyOrigIdx].name
         };
       }
     }
-    
-    return result;
+
+    // Default: return block match
+    return {
+      bestMatch: blockOrigIdx,
+      confidence: blockResult.confidence,
+      mse: blockResult.mse,
+      name: templates[blockOrigIdx].name
+    };
   }
 
   /**
