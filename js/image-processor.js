@@ -182,13 +182,12 @@ const ImageProcessor = (() => {
     // Sort by histogram score (descending)
     scores.sort((a, b) => b.histScore - a.histScore);
 
-    // Refine top 5 with MSE
-    const topN = Math.min(5, scores.length);
+    // Refine ALL candidates with MSE (only ~27 block templates at 32px = instant)
     let bestIdx = scores[0].idx;
     let bestMSE = Infinity;
     let bestHistScore = scores[0].histScore;
 
-    for (let i = 0; i < topN; i++) {
+    for (let i = 0; i < scores.length; i++) {
       const mse = computeMSE(cellImageData, templates[scores[i].idx].imageData);
       if (mse < bestMSE) {
         bestMSE = mse;
