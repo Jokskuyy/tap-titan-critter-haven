@@ -1,10 +1,10 @@
 /**
- * Critter Haven Bot — Image Processor v2
+ * Critter Haven Bot — Image Processor v3
  * Template matching using reference block images.
  * 
  * Approach: for each grid cell in the screenshot, resize + compare against
- * all reference templates using normalized color histogram similarity.
- * Pick the best match above a threshold.
+ * all reference templates. Uses background-masked MSE to ignore the green
+ * background and focus only on the icon shape/colors.
  */
 
 const ImageProcessor = (() => {
@@ -36,7 +36,6 @@ const ImageProcessor = (() => {
 
   /**
    * Extract pixel data from an image region, resized to a standard size.
-   * Returns { data: Uint8ClampedArray, width, height }
    */
   function extractRegion(img, x, y, w, h, targetSize = 32) {
     const canvas = document.createElement('canvas');
@@ -74,12 +73,11 @@ const ImageProcessor = (() => {
       const g = Math.min(bins - 1, Math.floor(data[i + 1] / 32));
       const b = Math.min(bins - 1, Math.floor(data[i + 2] / 32));
       const a = data[i + 3];
-      if (a < 128) continue; // skip transparent
+      if (a < 128) continue;
       hist[r * bins * bins + g * bins + b]++;
       total++;
     }
 
-    // Normalize
     if (total > 0) {
       for (let i = 0; i < hist.length; i++) {
         hist[i] /= total;
@@ -98,12 +96,71 @@ const ImageProcessor = (() => {
     for (let i = 0; i < h1.length; i++) {
       sum += Math.sqrt(h1[i] * h2[i]);
     }
-    return sum; // already normalized
+    return sum;
   }
 
   /**
-   * Compute Mean Squared Error between two ImageData objects.
-   * Lower = more similar. Compares center 60% of the image to avoid edge artifacts.
+   * Check if a pixel is "green background" — the green bg of the game board.
+   * Green BG has high G, moderate-high R, low-moderate B.
+   * Typical green bg: R=120-200, G=170-230, B=50-130
+   */
+  function isGreenBg(r, g, b) {
+    return g > 130 && g > r && g > b && (g - b) > 40;
+  }
+
+  /**
+   * Build a foreground mask for a template — pixels that are NOT green background.
+   * Returns Uint8Array where 1 = foreground (icon), 0 = background (green).
+   */
+  function buildForegroundMask(imageData) {
+    const d = imageData.data;
+    const w = imageData.width;
+    const h = imageData.height;
+    const mask = new Uint8Array(w * h);
+    
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = (y * w + x) * 4;
+        const r = d[idx], g = d[idx + 1], b = d[idx + 2], a = d[idx + 3];
+        // Foreground if: not transparent AND not green background
+        mask[y * w + x] = (a >= 128 && !isGreenBg(r, g, b)) ? 1 : 0;
+      }
+    }
+    
+    return mask;
+  }
+
+  /**
+   * Compute foreground-masked MSE between a cell and a template.
+   * Only compares pixels where the template has foreground (non-green) content.
+   * This focuses comparison on the actual icon, ignoring background variation.
+   */
+  function computeMaskedMSE(cellData, templateData, templateMask) {
+    const d1 = cellData.data;
+    const d2 = templateData.data;
+    const w = cellData.width;
+    const h = cellData.height;
+    let totalError = 0;
+    let count = 0;
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (templateMask[y * w + x] === 0) continue; // skip background
+        const idx = (y * w + x) * 4;
+        const dr = d1[idx] - d2[idx];
+        const dg = d1[idx + 1] - d2[idx + 1];
+        const db = d1[idx + 2] - d2[idx + 2];
+        totalError += dr * dr + dg * dg + db * db;
+        count++;
+      }
+    }
+
+    return count > 0 ? totalError / count : Infinity;
+  }
+
+  /**
+   * Compute standard MSE between two ImageData objects.
+   * Compares center 60% of the image to avoid edge artifacts.
    */
   function computeMSE(imgData1, imgData2) {
     const w = imgData1.width;
@@ -111,7 +168,6 @@ const ImageProcessor = (() => {
     const d1 = imgData1.data;
     const d2 = imgData2.data;
     
-    // Compare center region (skip edges which may have background)
     const marginX = Math.floor(w * 0.2);
     const marginY = Math.floor(h * 0.2);
     let totalError = 0;
@@ -133,7 +189,7 @@ const ImageProcessor = (() => {
 
   /**
    * Prepare a reference template from an image.
-   * Returns { name, img, histogram, imageData }
+   * Returns { name, img, histogram, imageData, foregroundMask, fgRatio }
    */
   async function prepareTemplate(url, name, targetSize = 32) {
     const img = await loadImageFromURL(url);
@@ -144,12 +200,14 @@ const ImageProcessor = (() => {
     ctx.drawImage(img, 0, 0, targetSize, targetSize);
     const imageData = ctx.getImageData(0, 0, targetSize, targetSize);
     const histogram = buildHistogram(imageData);
-    return { name, img, histogram, imageData };
+    const foregroundMask = buildForegroundMask(imageData);
+    const fgPixels = foregroundMask.reduce((a, b) => a + b, 0);
+    const fgRatio = fgPixels / (targetSize * targetSize);
+    return { name, img, histogram, imageData, foregroundMask, fgRatio };
   }
 
   /**
    * Load all reference templates from the imgs/ directory.
-   * fileList: array of { url, name } objects
    */
   async function loadTemplates(fileList, targetSize = 32) {
     const promises = fileList.map(async (file) => {
@@ -165,9 +223,10 @@ const ImageProcessor = (() => {
   }
 
   /**
-   * Match a grid cell against all templates.
-   * Uses histogram comparison first (fast filter), then MSE for top candidates.
-   * Returns { bestMatch: templateIndex, confidence: number, name: string }
+   * Match a grid cell against all templates using a two-pass approach:
+   * Pass 1: Histogram for coarse ranking (top 10)
+   * Pass 2: Foreground-masked MSE for precise matching
+   * Returns { bestMatch, confidence, mse, name }
    */
   function matchCell(cellImageData, templates, targetSize = 32) {
     const cellHist = buildHistogram(cellImageData);
@@ -182,13 +241,18 @@ const ImageProcessor = (() => {
     // Sort by histogram score (descending)
     scores.sort((a, b) => b.histScore - a.histScore);
 
-    // Refine ALL candidates with MSE (only ~27 block templates at 32px = instant)
+    // Refine top 10 with foreground-masked MSE
+    const topN = Math.min(10, scores.length);
     let bestIdx = scores[0].idx;
     let bestMSE = Infinity;
     let bestHistScore = scores[0].histScore;
 
-    for (let i = 0; i < scores.length; i++) {
-      const mse = computeMSE(cellImageData, templates[scores[i].idx].imageData);
+    for (let i = 0; i < topN; i++) {
+      const t = templates[scores[i].idx];
+      // Use masked MSE if template has enough foreground, else standard MSE
+      const mse = t.fgRatio > 0.15
+        ? computeMaskedMSE(cellImageData, t.imageData, t.foregroundMask)
+        : computeMSE(cellImageData, t.imageData);
       if (mse < bestMSE) {
         bestMSE = mse;
         bestIdx = scores[i].idx;
@@ -207,13 +271,11 @@ const ImageProcessor = (() => {
   /**
    * Detect if a cell is an empty slot by analyzing pixel color variance.
    * Empty cells have uniform green background with low variance.
-   * Returns true if cell is empty (no block icon present).
    */
   function isCellEmpty(cellImageData) {
     const d = cellImageData.data;
     const w = cellImageData.width;
     const h = cellImageData.height;
-    // Sample center 60%
     const mx = Math.floor(w * 0.2);
     const my = Math.floor(h * 0.2);
     let sumR = 0, sumG = 0, sumB = 0;
@@ -238,16 +300,13 @@ const ImageProcessor = (() => {
     const varB = sumB2 / count - avgB * avgB;
     const totalVar = varR + varG + varB;
 
-    // Empty cells: green dominant, low variance (uniform background)
     return avgG > avgR && avgG > avgB && totalVar < 800;
   }
 
   /**
    * Full pipeline: screenshot + crop rect + grid dims + templates → grid matrix.
-   * Returns { grid: number[][], matchDetails: object[][] }
    */
   function processImage(img, cropRect, rows, cols, templates, targetSize = 32) {
-    // Draw full image to a source canvas
     const srcCanvas = document.createElement('canvas');
     srcCanvas.width = img.width;
     srcCanvas.height = img.height;
@@ -257,7 +316,7 @@ const ImageProcessor = (() => {
     const cellW = cropRect.width / cols;
     const cellH = cropRect.height / rows;
 
-    // Filter out empty templates — they don't participate in matching
+    // Filter out empty templates
     const blockTemplates = templates.filter(t => !t.name.startsWith('empty'));
 
     const grid = [];
@@ -267,7 +326,6 @@ const ImageProcessor = (() => {
       const gridRow = [];
       const detailRow = [];
       for (let c = 0; c < cols; c++) {
-        // Extract cell with slight inset to avoid grid lines
         const inset = Math.max(1, Math.floor(Math.min(cellW, cellH) * 0.08));
         const cx = cropRect.x + c * cellW + inset;
         const cy = cropRect.y + r * cellH + inset;
@@ -276,17 +334,15 @@ const ImageProcessor = (() => {
 
         const cellData = extractFromCanvas(srcCanvas, cx, cy, cw, ch, targetSize);
 
-        // Step 1: Check if cell is empty via pixel analysis (no template needed)
+        // Check empty first
         if (isCellEmpty(cellData)) {
           gridRow.push(0);
           detailRow.push({ bestMatch: -1, confidence: 0, mse: 0, name: 'empty' });
           continue;
         }
 
-        // Step 2: Match against block templates only (original golden algorithm)
+        // Match against block templates
         const match = matchCell(cellData, blockTemplates, targetSize);
-
-        // Find original index in full templates array
         const originalIdx = templates.indexOf(blockTemplates[match.bestMatch]);
 
         gridRow.push(originalIdx + 1);
@@ -301,10 +357,10 @@ const ImageProcessor = (() => {
       matchDetails.push(detailRow);
     }
 
-    // Remap: find unique template indices used, assign sequential IDs (skipping 0)
+    // Remap
     const usedIndices = [...new Set(grid.flat())].filter(v => v !== 0).sort((a, b) => a - b);
     const remap = {};
-    remap[0] = 0; // Empty stays empty
+    remap[0] = 0;
     usedIndices.forEach((val, i) => { remap[val] = i + 1; });
 
     const remappedGrid = grid.map(row => row.map(v => remap[v]));
@@ -325,7 +381,6 @@ const ImageProcessor = (() => {
     loadTemplates,
     matchCell,
     processImage,
-    // Keep old methods for backward compat
     buildHistogram,
     compareHistograms,
     computeMSE
