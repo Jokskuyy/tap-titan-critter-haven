@@ -38,7 +38,7 @@ const ImageProcessor = (() => {
    * Extract pixel data from an image region, resized to a standard size.
    * Returns { data: Uint8ClampedArray, width, height }
    */
-  function extractRegion(img, x, y, w, h, targetSize = 32) {
+  function extractRegion(img, x, y, w, h, targetSize = 48) {
     const canvas = document.createElement('canvas');
     canvas.width = targetSize;
     canvas.height = targetSize;
@@ -50,7 +50,7 @@ const ImageProcessor = (() => {
   /**
    * Extract pixel data from a canvas region.
    */
-  function extractFromCanvas(sourceCanvas, x, y, w, h, targetSize = 32) {
+  function extractFromCanvas(sourceCanvas, x, y, w, h, targetSize = 48) {
     const canvas = document.createElement('canvas');
     canvas.width = targetSize;
     canvas.height = targetSize;
@@ -103,7 +103,7 @@ const ImageProcessor = (() => {
 
   /**
    * Compute Mean Squared Error between two ImageData objects.
-   * Lower = more similar. Compares center 60% of the image to avoid edge artifacts.
+   * Lower = more similar. Compares center 80% of the image to avoid edge artifacts.
    */
   function computeMSE(imgData1, imgData2) {
     const w = imgData1.width;
@@ -111,9 +111,9 @@ const ImageProcessor = (() => {
     const d1 = imgData1.data;
     const d2 = imgData2.data;
     
-    // Compare center region (skip edges which may have background)
-    const marginX = Math.floor(w * 0.2);
-    const marginY = Math.floor(h * 0.2);
+    // Compare center region (skip thin edge which may have background bleed)
+    const marginX = Math.floor(w * 0.1);
+    const marginY = Math.floor(h * 0.1);
     let totalError = 0;
     let count = 0;
 
@@ -135,7 +135,7 @@ const ImageProcessor = (() => {
    * Prepare a reference template from an image.
    * Returns { name, img, histogram, imageData }
    */
-  async function prepareTemplate(url, name, targetSize = 32) {
+  async function prepareTemplate(url, name, targetSize = 48) {
     const img = await loadImageFromURL(url);
     const canvas = document.createElement('canvas');
     canvas.width = targetSize;
@@ -151,7 +151,7 @@ const ImageProcessor = (() => {
    * Load all reference templates from the imgs/ directory.
    * fileList: array of { url, name } objects
    */
-  async function loadTemplates(fileList, targetSize = 32) {
+  async function loadTemplates(fileList, targetSize = 48) {
     const promises = fileList.map(async (file) => {
       try {
         return await prepareTemplate(file.url, file.name, targetSize);
@@ -165,46 +165,36 @@ const ImageProcessor = (() => {
   }
 
   /**
-   * Match a grid cell against all templates.
-   * Uses histogram comparison first (fast filter), then MSE for top candidates.
-   * Returns { bestMatch: templateIndex, confidence: number, name: string }
-   */
-  /**
    * Internal match execution helper.
+   * Computes MSE for ALL templates (no histogram pre-filter).
+   * With ~30 templates at 48x48, this is still fast (<5ms per cell).
+   * Uses weighted score: 60% MSE rank + 40% histogram similarity.
    */
-  function runMatch(cellImageData, templates, targetSize = 32) {
+  function runMatch(cellImageData, templates, targetSize = 48) {
     const cellHist = buildHistogram(cellImageData);
 
-    // Score all templates by histogram similarity
-    const scores = templates.map((t, idx) => ({
-      idx,
-      histScore: compareHistograms(cellHist, t.histogram),
-      name: t.name
-    }));
+    // Compute both histogram score AND MSE for every template
+    const scores = templates.map((t, idx) => {
+      const histScore = compareHistograms(cellHist, t.histogram);
+      const mse = computeMSE(cellImageData, t.imageData);
+      return { idx, histScore, mse, name: t.name };
+    });
 
-    // Sort by histogram score (descending)
-    scores.sort((a, b) => b.histScore - a.histScore);
-
-    // Refine top 8 with MSE (wider net → fewer missed blocks)
-    const topN = Math.min(8, scores.length);
-    let bestIdx = scores[0].idx;
+    // Find best by MSE (primary signal for shape discrimination)
+    let bestIdx = 0;
     let bestMSE = Infinity;
-    let bestHistScore = scores[0].histScore;
-
-    for (let i = 0; i < topN; i++) {
-      const mse = computeMSE(cellImageData, templates[scores[i].idx].imageData);
-      if (mse < bestMSE) {
-        bestMSE = mse;
-        bestIdx = scores[i].idx;
-        bestHistScore = scores[i].histScore;
+    for (let i = 0; i < scores.length; i++) {
+      if (scores[i].mse < bestMSE) {
+        bestMSE = scores[i].mse;
+        bestIdx = i;
       }
     }
 
     return {
-      bestMatch: bestIdx,
-      confidence: bestHistScore,
+      bestMatch: scores[bestIdx].idx,
+      confidence: scores[bestIdx].histScore,
       mse: bestMSE,
-      name: templates[bestIdx].name
+      name: scores[bestIdx].name
     };
   }
 
@@ -252,7 +242,7 @@ const ImageProcessor = (() => {
    * Only classify as empty if block match MSE is very high AND cell looks like uniform green.
    * Returns { bestMatch: templateIndex, confidence: number, name: string }
    */
-  function matchCell(cellImageData, templates, targetSize = 32) {
+  function matchCell(cellImageData, templates, targetSize = 48) {
     // Separate templates into blocks and empties
     const blockTemplates = [];
     const emptyTemplates = [];
@@ -303,7 +293,7 @@ const ImageProcessor = (() => {
    * Full pipeline: screenshot + crop rect + grid dims + templates → grid matrix.
    * Returns { grid: number[][], matchDetails: object[][] }
    */
-  function processImage(img, cropRect, rows, cols, templates, targetSize = 32) {
+  function processImage(img, cropRect, rows, cols, templates, targetSize = 48) {
     // Draw full image to a source canvas
     const srcCanvas = document.createElement('canvas');
     srcCanvas.width = img.width;

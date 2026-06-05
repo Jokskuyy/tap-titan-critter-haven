@@ -62,7 +62,7 @@ export class UIController {
     ).join('');
 
     try {
-      this.state.templates = await ImageProcessor.loadTemplates(fileList, 32);
+      this.state.templates = await ImageProcessor.loadTemplates(fileList, 48);
       this.renderTemplateGallery();
       status.textContent = `${this.state.templates.length} templates loaded`;
       status.style.color = 'var(--accent-success)';
