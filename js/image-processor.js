@@ -38,7 +38,7 @@ const ImageProcessor = (() => {
    * Extract pixel data from an image region, resized to a standard size.
    * Returns { data: Uint8ClampedArray, width, height }
    */
-  function extractRegion(img, x, y, w, h, targetSize = 48) {
+  function extractRegion(img, x, y, w, h, targetSize = 32) {
     const canvas = document.createElement('canvas');
     canvas.width = targetSize;
     canvas.height = targetSize;
@@ -50,7 +50,7 @@ const ImageProcessor = (() => {
   /**
    * Extract pixel data from a canvas region.
    */
-  function extractFromCanvas(sourceCanvas, x, y, w, h, targetSize = 48) {
+  function extractFromCanvas(sourceCanvas, x, y, w, h, targetSize = 32) {
     const canvas = document.createElement('canvas');
     canvas.width = targetSize;
     canvas.height = targetSize;
@@ -103,7 +103,7 @@ const ImageProcessor = (() => {
 
   /**
    * Compute Mean Squared Error between two ImageData objects.
-   * Lower = more similar. Compares center 80% of the image to avoid edge artifacts.
+   * Lower = more similar. Compares center 60% of the image to avoid edge artifacts.
    */
   function computeMSE(imgData1, imgData2) {
     const w = imgData1.width;
@@ -111,9 +111,9 @@ const ImageProcessor = (() => {
     const d1 = imgData1.data;
     const d2 = imgData2.data;
     
-    // Compare center region (skip thin edge which may have background bleed)
-    const marginX = Math.floor(w * 0.1);
-    const marginY = Math.floor(h * 0.1);
+    // Compare center region (skip edges which may have background)
+    const marginX = Math.floor(w * 0.2);
+    const marginY = Math.floor(h * 0.2);
     let totalError = 0;
     let count = 0;
 
@@ -135,7 +135,7 @@ const ImageProcessor = (() => {
    * Prepare a reference template from an image.
    * Returns { name, img, histogram, imageData }
    */
-  async function prepareTemplate(url, name, targetSize = 48) {
+  async function prepareTemplate(url, name, targetSize = 32) {
     const img = await loadImageFromURL(url);
     const canvas = document.createElement('canvas');
     canvas.width = targetSize;
@@ -151,7 +151,7 @@ const ImageProcessor = (() => {
    * Load all reference templates from the imgs/ directory.
    * fileList: array of { url, name } objects
    */
-  async function loadTemplates(fileList, targetSize = 48) {
+  async function loadTemplates(fileList, targetSize = 32) {
     const promises = fileList.map(async (file) => {
       try {
         return await prepareTemplate(file.url, file.name, targetSize);
@@ -165,44 +165,52 @@ const ImageProcessor = (() => {
   }
 
   /**
-   * Internal match execution helper.
-   * Computes MSE for ALL templates (no histogram pre-filter).
-   * With ~30 templates at 48x48, this is still fast (<5ms per cell).
-   * Uses weighted score: 60% MSE rank + 40% histogram similarity.
+   * Match a grid cell against all templates.
+   * Uses histogram comparison first (fast filter), then MSE for top candidates.
+   * Returns { bestMatch: templateIndex, confidence: number, name: string }
    */
-  function runMatch(cellImageData, templates, targetSize = 48) {
+  function matchCell(cellImageData, templates, targetSize = 32) {
     const cellHist = buildHistogram(cellImageData);
 
-    // Compute both histogram score AND MSE for every template
-    const scores = templates.map((t, idx) => {
-      const histScore = compareHistograms(cellHist, t.histogram);
-      const mse = computeMSE(cellImageData, t.imageData);
-      return { idx, histScore, mse, name: t.name };
-    });
+    // Score all templates by histogram similarity
+    const scores = templates.map((t, idx) => ({
+      idx,
+      histScore: compareHistograms(cellHist, t.histogram),
+      name: t.name
+    }));
 
-    // Find best by MSE (primary signal for shape discrimination)
-    let bestIdx = 0;
+    // Sort by histogram score (descending)
+    scores.sort((a, b) => b.histScore - a.histScore);
+
+    // Refine top 5 with MSE
+    const topN = Math.min(5, scores.length);
+    let bestIdx = scores[0].idx;
     let bestMSE = Infinity;
-    for (let i = 0; i < scores.length; i++) {
-      if (scores[i].mse < bestMSE) {
-        bestMSE = scores[i].mse;
-        bestIdx = i;
+    let bestHistScore = scores[0].histScore;
+
+    for (let i = 0; i < topN; i++) {
+      const mse = computeMSE(cellImageData, templates[scores[i].idx].imageData);
+      if (mse < bestMSE) {
+        bestMSE = mse;
+        bestIdx = scores[i].idx;
+        bestHistScore = scores[i].histScore;
       }
     }
 
     return {
-      bestMatch: scores[bestIdx].idx,
-      confidence: scores[bestIdx].histScore,
+      bestMatch: bestIdx,
+      confidence: bestHistScore,
       mse: bestMSE,
-      name: scores[bestIdx].name
+      name: templates[bestIdx].name
     };
   }
 
   /**
-   * Check if a cell's center region is mostly uniform green (empty slot indicator).
-   * Returns true if the cell has low color variance and dominant green channel.
+   * Detect if a cell is an empty slot by analyzing pixel color variance.
+   * Empty cells have uniform green background with low variance.
+   * Returns true if cell is empty (no block icon present).
    */
-  function isUniformGreen(cellImageData) {
+  function isCellEmpty(cellImageData) {
     const d = cellImageData.data;
     const w = cellImageData.width;
     const h = cellImageData.height;
@@ -232,68 +240,14 @@ const ImageProcessor = (() => {
     const totalVar = varR + varG + varB;
 
     // Empty cells: green dominant, low variance (uniform background)
-    // Typical empty: avgG > avgR && avgG > avgB, totalVar < 800
-    return avgG > avgR && avgG > avgB && totalVar < 1200;
-  }
-
-  /**
-   * Match a grid cell against all templates.
-   * Strategy: "blocks-first" — match against non-empty templates first.
-   * Only classify as empty if block match MSE is very high AND cell looks like uniform green.
-   * Returns { bestMatch: templateIndex, confidence: number, name: string }
-   */
-  function matchCell(cellImageData, templates, targetSize = 48) {
-    // Separate templates into blocks and empties
-    const blockTemplates = [];
-    const emptyTemplates = [];
-    const blockToOrigIdx = [];
-    const emptyToOrigIdx = [];
-
-    templates.forEach((t, i) => {
-      if (t.name.startsWith('empty')) {
-        emptyTemplates.push(t);
-        emptyToOrigIdx.push(i);
-      } else {
-        blockTemplates.push(t);
-        blockToOrigIdx.push(i);
-      }
-    });
-
-    // Step 1: Match against blocks only
-    const blockResult = runMatch(cellImageData, blockTemplates, targetSize);
-    const blockOrigIdx = blockToOrigIdx[blockResult.bestMatch];
-
-    // Step 2: Decide if this is actually empty
-    // Only consider empty if: block MSE is high AND cell is uniform green
-    if (emptyTemplates.length > 0 && blockResult.mse > 1800 && isUniformGreen(cellImageData)) {
-      // Confirm with empty template match
-      const emptyResult = runMatch(cellImageData, emptyTemplates, targetSize);
-      // Empty wins only if its MSE is significantly better than the block match
-      if (emptyResult.mse < blockResult.mse * 0.7) {
-        const emptyOrigIdx = emptyToOrigIdx[emptyResult.bestMatch];
-        return {
-          bestMatch: emptyOrigIdx,
-          confidence: emptyResult.confidence,
-          mse: emptyResult.mse,
-          name: templates[emptyOrigIdx].name
-        };
-      }
-    }
-
-    // Default: return block match
-    return {
-      bestMatch: blockOrigIdx,
-      confidence: blockResult.confidence,
-      mse: blockResult.mse,
-      name: templates[blockOrigIdx].name
-    };
+    return avgG > avgR && avgG > avgB && totalVar < 800;
   }
 
   /**
    * Full pipeline: screenshot + crop rect + grid dims + templates → grid matrix.
    * Returns { grid: number[][], matchDetails: object[][] }
    */
-  function processImage(img, cropRect, rows, cols, templates, targetSize = 48) {
+  function processImage(img, cropRect, rows, cols, templates, targetSize = 32) {
     // Draw full image to a source canvas
     const srcCanvas = document.createElement('canvas');
     srcCanvas.width = img.width;
@@ -303,6 +257,9 @@ const ImageProcessor = (() => {
 
     const cellW = cropRect.width / cols;
     const cellH = cropRect.height / rows;
+
+    // Filter out empty templates — they don't participate in matching
+    const blockTemplates = templates.filter(t => !t.name.startsWith('empty'));
 
     const grid = [];
     const matchDetails = [];
@@ -319,15 +276,27 @@ const ImageProcessor = (() => {
         const ch = cellH - inset * 2;
 
         const cellData = extractFromCanvas(srcCanvas, cx, cy, cw, ch, targetSize);
-        const match = matchCell(cellData, templates, targetSize);
 
-        const template = templates[match.bestMatch];
-        if (template.name.startsWith('empty')) {
+        // Step 1: Check if cell is empty via pixel analysis (no template needed)
+        if (isCellEmpty(cellData)) {
           gridRow.push(0);
-        } else {
-          gridRow.push(match.bestMatch + 1);
+          detailRow.push({ bestMatch: -1, confidence: 0, mse: 0, name: 'empty' });
+          continue;
         }
-        detailRow.push(match);
+
+        // Step 2: Match against block templates only (original golden algorithm)
+        const match = matchCell(cellData, blockTemplates, targetSize);
+
+        // Find original index in full templates array
+        const originalIdx = templates.indexOf(blockTemplates[match.bestMatch]);
+
+        gridRow.push(originalIdx + 1);
+        detailRow.push({
+          bestMatch: originalIdx,
+          confidence: match.confidence,
+          mse: match.mse,
+          name: match.name
+        });
       }
       grid.push(gridRow);
       matchDetails.push(detailRow);
