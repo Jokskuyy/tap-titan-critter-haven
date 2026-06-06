@@ -286,51 +286,6 @@ const ImageProcessor = (() => {
     };
   }
 
-  // ─── Empty Detection ───────────────────────────────────────────
-
-  function isCellEmpty(cellImageData) {
-    const d = cellImageData.data;
-    const w = cellImageData.width, h = cellImageData.height;
-    const mx = Math.floor(w * 0.2), my = Math.floor(h * 0.2);
-    let sumR = 0, sumG = 0, sumB = 0;
-    let sumR2 = 0, sumG2 = 0, sumB2 = 0;
-    let count = 0;
-
-    for (let y = my; y < h - my; y++) {
-      for (let x = mx; x < w - mx; x++) {
-        const idx = (y * w + x) * 4;
-        const r = d[idx], g = d[idx+1], b = d[idx+2];
-        sumR += r; sumG += g; sumB += b;
-        sumR2 += r*r; sumG2 += g*g; sumB2 += b*b;
-        count++;
-      }
-    }
-    if (count === 0) return false;
-
-    const avgR = sumR/count, avgG = sumG/count, avgB = sumB/count;
-    const varR = sumR2/count - avgR*avgR;
-    const varG = sumG2/count - avgG*avgG;
-    const varB = sumB2/count - avgB*avgB;
-    const totalVar = varR + varG + varB;
-
-    // Must be green-dominant and low variance
-    if (!(avgG > avgR && avgG > avgB && totalVar < 800)) return false;
-
-    // Edge energy check: empty cells have almost no edges (flat green)
-    // Blocks like Leaf are green but have visible outlines/veins
-    const edges = computeEdgeMap(cellImageData);
-    let edgeEnergy = 0;
-    for (let y = my; y < h - my; y++) {
-      for (let x = mx; x < w - mx; x++) {
-        edgeEnergy += edges[y * w + x];
-      }
-    }
-    edgeEnergy /= count; // average edge energy in center
-
-    // Empty cells have very low edge energy (<0.05), blocks have more
-    return edgeEnergy < 0.08;
-  }
-
   // ─── Pipeline ──────────────────────────────────────────────────
 
   function processImage(img, cropRect, rows, cols, templates, targetSize = 32) {
@@ -343,7 +298,7 @@ const ImageProcessor = (() => {
     // We use uniform grid based on the user's manual crop rect.
     let detectedCells = null;
 
-    const blockTemplates = templates.filter(t => !t.name.startsWith('empty'));
+    const blockTemplates = templates;
     const grid = [];
     const matchDetails = [];
 
@@ -353,22 +308,13 @@ const ImageProcessor = (() => {
       for (let c = 0; c < cols; c++) {
         let cx, cy, cw, ch;
 
-        if (detectedCells) {
-          const cell = detectedCells[r][c];
-          const inset = Math.max(1, Math.floor(Math.min(cell.w, cell.h) * 0.1));
-          cx = cell.x + inset;
-          cy = cell.y + inset;
-          cw = cell.w - inset * 2;
-          ch = cell.h - inset * 2;
-        } else {
-          const cellW = cropRect.width / cols;
-          const cellH = cropRect.height / rows;
-          const inset = Math.max(1, Math.floor(Math.min(cellW, cellH) * 0.08));
-          cx = cropRect.x + c * cellW + inset;
-          cy = cropRect.y + r * cellH + inset;
-          cw = cellW - inset * 2;
-          ch = cellH - inset * 2;
-        }
+        const cellW = cropRect.width / cols;
+        const cellH = cropRect.height / rows;
+        const inset = Math.max(1, Math.floor(Math.min(cellW, cellH) * 0.08));
+        cx = cropRect.x + c * cellW + inset;
+        cy = cropRect.y + r * cellH + inset;
+        cw = cellW - inset * 2;
+        ch = cellH - inset * 2;
 
         const cellImg = extractFromCanvas(srcCanvas, cx, cy, cw, ch, targetSize);
         if (typeof global !== 'undefined') {
@@ -376,22 +322,30 @@ const ImageProcessor = (() => {
           global.debugC = c;
         }
 
-        if (isCellEmpty(cellImg)) {
-          gridRow.push(0);
-          detailRow.push({ bestMatch: -1, confidence: 0, mse: 0, name: 'empty' });
-          continue;
+        const match = matchCell(cellImg, blockTemplates, targetSize);
+        let originalIdx = match.bestMatch;
+        let isEmpty = blockTemplates[originalIdx].name.startsWith('empty');
+
+        // GRAVITY RULE: A block cannot float. If the cell above is filled, this cell cannot be empty.
+        if (isEmpty && r > 0 && grid[r - 1][c] !== 0) {
+          const nonEmptyTemplates = templates.filter(t => !t.name.startsWith('empty'));
+          const match2 = matchCell(cellImg, nonEmptyTemplates, targetSize);
+          originalIdx = templates.indexOf(nonEmptyTemplates[match2.bestMatch]);
+          isEmpty = false;
         }
 
-        const match = matchCell(cellImg, blockTemplates, targetSize);
-        const originalIdx = templates.indexOf(blockTemplates[match.bestMatch]);
-
-        gridRow.push(originalIdx + 1);
-        detailRow.push({
-          bestMatch: originalIdx,
-          confidence: match.confidence,
-          mse: match.mse,
-          name: match.name
-        });
+        if (isEmpty) {
+          gridRow.push(0);
+          detailRow.push({ bestMatch: originalIdx, confidence: match.confidence || 0, mse: match.mse || 0, name: 'empty' });
+        } else {
+          gridRow.push(originalIdx + 1);
+          detailRow.push({
+            bestMatch: originalIdx,
+            confidence: match.confidence || 0,
+            mse: match.mse || 0,
+            name: match.name || blockTemplates[originalIdx].name
+          });
+        }
       }
       grid.push(gridRow);
       matchDetails.push(detailRow);
