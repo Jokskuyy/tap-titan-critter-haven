@@ -340,13 +340,8 @@ const ImageProcessor = (() => {
     const srcCtx = srcCanvas.getContext('2d');
     srcCtx.drawImage(img, 0, 0);
 
-    // GridDetector for precise cells
+    // We use uniform grid based on the user's manual crop rect.
     let detectedCells = null;
-    if (typeof GridDetector !== 'undefined') {
-      const result = GridDetector.detectGrid(srcCanvas, cropRect, rows, cols);
-      detectedCells = result.cells;
-      console.log(`Grid detection: ${result.detected ? 'SUCCESS' : 'FALLBACK'}`);
-    }
 
     const blockTemplates = templates.filter(t => !t.name.startsWith('empty'));
     const grid = [];
