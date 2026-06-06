@@ -292,8 +292,24 @@ const ImageProcessor = (() => {
     const varR = sumR2/count - avgR*avgR;
     const varG = sumG2/count - avgG*avgG;
     const varB = sumB2/count - avgB*avgB;
+    const totalVar = varR + varG + varB;
 
-    return avgG > avgR && avgG > avgB && (varR + varG + varB) < 800;
+    // Must be green-dominant and low variance
+    if (!(avgG > avgR && avgG > avgB && totalVar < 800)) return false;
+
+    // Edge energy check: empty cells have almost no edges (flat green)
+    // Blocks like Leaf are green but have visible outlines/veins
+    const edges = computeEdgeMap(cellImageData);
+    let edgeEnergy = 0;
+    for (let y = my; y < h - my; y++) {
+      for (let x = mx; x < w - mx; x++) {
+        edgeEnergy += edges[y * w + x];
+      }
+    }
+    edgeEnergy /= count; // average edge energy in center
+
+    // Empty cells have very low edge energy (<0.05), blocks have more
+    return edgeEnergy < 0.08;
   }
 
   // ─── Pipeline ──────────────────────────────────────────────────
@@ -361,6 +377,43 @@ const ImageProcessor = (() => {
       }
       grid.push(gridRow);
       matchDetails.push(detailRow);
+    }
+
+    // ─── Gravity Rule ─────────────────────────────────────────
+    // Empty cells can't exist below filled cells in the same column.
+    // Gravity pulls blocks down, so empties must be at TOP of column.
+    // If we find empty below a block, re-match it as a block.
+    for (let c = 0; c < cols; c++) {
+      let foundBlock = false;
+      for (let r = 0; r < rows; r++) {
+        if (grid[r][c] !== 0) {
+          foundBlock = true;
+        } else if (foundBlock && grid[r][c] === 0) {
+          // Impossible empty — re-match as block
+          let cx2, cy2, cw2, ch2;
+          if (detectedCells) {
+            const cell = detectedCells[r][c];
+            const inset = Math.max(1, Math.floor(Math.min(cell.w, cell.h) * 0.1));
+            cx2 = cell.x + inset; cy2 = cell.y + inset;
+            cw2 = cell.w - inset * 2; ch2 = cell.h - inset * 2;
+          } else {
+            const cellW = cropRect.width / cols;
+            const cellH = cropRect.height / rows;
+            const inset = Math.max(1, Math.floor(Math.min(cellW, cellH) * 0.08));
+            cx2 = cropRect.x + c * cellW + inset; cy2 = cropRect.y + r * cellH + inset;
+            cw2 = cellW - inset * 2; ch2 = cellH - inset * 2;
+          }
+          const cellData = extractFromCanvas(srcCanvas, cx2, cy2, cw2, ch2, targetSize);
+          const match = matchCell(cellData, blockTemplates, targetSize);
+          const originalIdx = templates.indexOf(blockTemplates[match.bestMatch]);
+          grid[r][c] = originalIdx + 1;
+          matchDetails[r][c] = {
+            bestMatch: originalIdx, confidence: match.confidence,
+            mse: match.mse, name: match.name
+          };
+          console.log(`Gravity fix: [${r},${c}] was empty → ${match.name}`);
+        }
+      }
     }
 
     const usedIndices = [...new Set(grid.flat())].filter(v => v !== 0).sort((a, b) => a - b);
