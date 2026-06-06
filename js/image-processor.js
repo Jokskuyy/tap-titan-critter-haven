@@ -48,20 +48,36 @@ const ImageProcessor = (() => {
 
   // ─── Color Histogram ───────────────────────────────────────────
 
-  function buildHistogram(imageData) {
+  function buildHistogram(imgData) {
     const bins = 8;
-    const hist = new Float64Array(bins * bins * bins);
-    const data = imageData.data;
-    let total = 0;
+    const hist = new Float32Array(bins * bins * bins);
+    const data = imgData.data;
+    let count = 0;
+    
     for (let i = 0; i < data.length; i += 4) {
-      const r = Math.min(bins - 1, Math.floor(data[i] / 32));
-      const g = Math.min(bins - 1, Math.floor(data[i + 1] / 32));
-      const b = Math.min(bins - 1, Math.floor(data[i + 2] / 32));
-      if (data[i + 3] < 128) continue;
-      hist[r * bins * bins + g * bins + b]++;
-      total++;
+      if (data[i + 3] < 128) continue; // Ignore transparent pixels
+      
+      const r = data[i];
+      const g = data[i+1];
+      const b = data[i+2];
+      
+      // Ignore board background (green)
+      const isBg = (g > r + 30) && (g > b + 50) && (r > 80 && r < 200) && (g > 140 && g < 240) && (b < 120);
+      if (isBg) continue;
+      
+      const binR = Math.floor((r / 256) * bins);
+      const binG = Math.floor((g / 256) * bins);
+      const binB = Math.floor((b / 256) * bins);
+      
+      hist[binR * bins * bins + binG * bins + binB]++;
+      count++;
     }
-    if (total > 0) for (let i = 0; i < hist.length; i++) hist[i] /= total;
+    
+    if (count > 0) {
+      for (let i = 0; i < hist.length; i++) {
+        hist[i] /= count;
+      }
+    }
     return hist;
   }
 
@@ -128,52 +144,58 @@ const ImageProcessor = (() => {
    * Returns value between 0 (no match) and 1 (identical outline).
    * Only considers center 70% to avoid edge artifacts.
    */
-  function compareEdgeMaps(e1, e2, size) {
-    const margin = Math.floor(size * 0.15);
-    let sum1 = 0, sum2 = 0, sumProd = 0;
-    let sumSq1 = 0, sumSq2 = 0;
-    let count = 0;
-
+  function compareEdgeMaps(edges1, edges2, size = 32, tImgData) {
+    let sum1 = 0, sum2 = 0, sumProd = 0, sumSq1 = 0, sumSq2 = 0, count = 0;
+    const margin = 1; // Only 1px margin to preserve outlines
+    
     for (let y = margin; y < size - margin; y++) {
       for (let x = margin; x < size - margin; x++) {
         const idx = y * size + x;
-        const v1 = e1[idx], v2 = e2[idx];
-        sum1 += v1; sum2 += v2;
-        sumProd += v1 * v2;
-        sumSq1 += v1 * v1; sumSq2 += v2 * v2;
-        count++;
+        // Only evaluate edge correlation where the template actually has content
+        if (tImgData.data[idx * 4 + 3] > 128) {
+          const v1 = edges1[idx], v2 = edges2[idx];
+          sum1 += v1; sum2 += v2; sumProd += v1 * v2;
+          sumSq1 += v1 * v1; sumSq2 += v2 * v2; count++;
+        }
       }
     }
-
+    if (count === 0) return 0;
+    
     const mean1 = sum1 / count, mean2 = sum2 / count;
     const var1 = sumSq1 / count - mean1 * mean1;
     const var2 = sumSq2 / count - mean2 * mean2;
     const covar = sumProd / count - mean1 * mean2;
+    
     const denom = Math.sqrt(var1 * var2);
-
-    return denom > 0.0001 ? Math.max(0, covar / denom) : 0;
+    if (denom < 0.0001) return 0;
+    return Math.max(0, covar / denom);
   }
 
   // ─── MSE ───────────────────────────────────────────────────────
 
-  function computeMSE(imgData1, imgData2) {
-    const w = imgData1.width, h = imgData1.height;
-    const d1 = imgData1.data, d2 = imgData2.data;
-    const marginX = Math.floor(w * 0.2);
-    const marginY = Math.floor(h * 0.2);
-    let totalError = 0, count = 0;
-
-    for (let y = marginY; y < h - marginY; y++) {
-      for (let x = marginX; x < w - marginX; x++) {
+  function computeMSE(img1, img2) {
+    const d1 = img1.data;
+    const d2 = img2.data;
+    let err = 0;
+    let count = 0;
+    const margin = Math.floor(img1.width * 0.15); // Match edge margin
+    const w = img1.width;
+    const h = img1.height;
+    
+    for (let y = margin; y < h - margin; y++) {
+      for (let x = margin; x < w - margin; x++) {
         const idx = (y * w + x) * 4;
-        const dr = d1[idx] - d2[idx];
-        const dg = d1[idx+1] - d2[idx+1];
-        const db = d1[idx+2] - d2[idx+2];
-        totalError += dr * dr + dg * dg + db * db;
-        count++;
+        // Compute MSE ONLY where the template has content
+        if (d2[idx + 3] > 128) {
+          const dr = d1[idx] - d2[idx];
+          const dg = d1[idx + 1] - d2[idx + 1];
+          const db = d1[idx + 2] - d2[idx + 2];
+          err += dr * dr + dg * dg + db * db;
+          count++;
+        }
       }
     }
-    return count > 0 ? totalError / count : Infinity;
+    return count === 0 ? Infinity : err / count;
   }
 
   // ─── Template Loading ──────────────────────────────────────────
@@ -214,26 +236,23 @@ const ImageProcessor = (() => {
    * 1. Histogram → coarse filter (top 10)
    * 2. Edge map correlation → shape matching (primary signal)
    * 3. MSE → final tiebreaker
-   * 
-   * Combined score: 60% edge + 25% histogram + 15% MSE rank
    */
-  function matchCell(cellImageData, templates, targetSize = 32) {
+  function matchCell(cellImageData, templates, targetSize = 32, config = {wEdge: 0.1, wHist: 0.4, wMSE: 0.5}) {
     const cellHist = buildHistogram(cellImageData);
     const cellEdges = computeEdgeMap(cellImageData);
 
-    // Stage 1: Histogram coarse filter — top 10
+    // Stage 1: Histogram coarse filter — all templates
     const histScores = templates.map((t, idx) => ({
       idx,
       histScore: compareHistograms(cellHist, t.histogram)
     }));
     histScores.sort((a, b) => b.histScore - a.histScore);
-    const topN = Math.min(10, histScores.length);
 
     // Stage 2+3: Edge correlation + MSE on top candidates
     const candidates = [];
-    for (let i = 0; i < topN; i++) {
+    for (let i = 0; i < histScores.length; i++) {
       const t = templates[histScores[i].idx];
-      const edgeScore = compareEdgeMaps(cellEdges, t.edgeMap, targetSize);
+      const edgeScore = compareEdgeMaps(cellEdges, t.edgeMap, targetSize, t.imageData);
       const mse = computeMSE(cellImageData, t.imageData);
       candidates.push({
         idx: histScores[i].idx,
@@ -249,31 +268,14 @@ const ImageProcessor = (() => {
     const minMSE = Math.min(...candidates.map(c => c.mse));
     const mseRange = maxMSE - minMSE;
 
-    // Adaptive weights: when shapes are similar (edge scores close),
-    // shift weight from edge → MSE for color/texture tiebreaking.
-    // e.g., Pet20 (light blue circle) vs Pet30 (dark blue circle)
-    const edgeScores = candidates.map(c => c.edgeScore);
-    const edgeSpread = Math.max(...edgeScores) - Math.min(...edgeScores);
-    
-    let wEdge, wHist, wMSE;
-    if (edgeSpread < 0.15) {
-      // Similar shapes → MSE decides (color/texture)
-      wEdge = 0.20; wHist = 0.30; wMSE = 0.50;
-    } else if (edgeSpread < 0.30) {
-      // Moderate shape difference → balanced
-      wEdge = 0.40; wHist = 0.25; wMSE = 0.35;
-    } else {
-      // Clear shape difference → edge decides
-      wEdge = 0.55; wHist = 0.25; wMSE = 0.20;
-    }
-
     for (const c of candidates) {
       const mseNorm = mseRange > 0 ? 1 - (c.mse - minMSE) / mseRange : 1;
-      c.combinedScore = wEdge * c.edgeScore + wHist * c.histScore + wMSE * mseNorm;
+      c.combinedScore = (config.wEdge * c.edgeScore) + (config.wHist * c.histScore) + (config.wMSE * mseNorm);
     }
 
-    // Pick best combined score
     candidates.sort((a, b) => b.combinedScore - a.combinedScore);
+    
+    
     const best = candidates[0];
 
     return {
@@ -373,15 +375,19 @@ const ImageProcessor = (() => {
           ch = cellH - inset * 2;
         }
 
-        const cellData = extractFromCanvas(srcCanvas, cx, cy, cw, ch, targetSize);
+        const cellImg = extractFromCanvas(srcCanvas, cx, cy, cw, ch, targetSize);
+        if (typeof global !== 'undefined') {
+          global.debugR = r;
+          global.debugC = c;
+        }
 
-        if (isCellEmpty(cellData)) {
+        if (isCellEmpty(cellImg)) {
           gridRow.push(0);
           detailRow.push({ bestMatch: -1, confidence: 0, mse: 0, name: 'empty' });
           continue;
         }
 
-        const match = matchCell(cellData, blockTemplates, targetSize);
+        const match = matchCell(cellImg, blockTemplates, targetSize);
         const originalIdx = templates.indexOf(blockTemplates[match.bestMatch]);
 
         gridRow.push(originalIdx + 1);
