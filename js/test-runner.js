@@ -11,10 +11,18 @@ async function init() {
   $('btn-run-tests').addEventListener('click', runTests);
 
   // Load templates
-  const fileList = TEMPLATE_FILES.map(name => ({
-    url: `imgs/${name}.png`,
-    name: name.replace('TT2_', '').replace('Pet', 'Pet ').replace('Item', '')
-  }));
+  const fileList = TEMPLATE_FILES.map(name => {
+    let displayName = name;
+    if (name.startsWith('TT2_')) {
+      displayName = name.replace('TT2_', '');
+    } else if (name.startsWith('Pet') && name.endsWith('Item')) {
+      displayName = name.replace('Pet', 'Pet ').replace('Item', '');
+    }
+    return {
+      url: `imgs/${name}.png`,
+      name: displayName
+    };
+  });
 
   try {
     $('summary').textContent = 'Loading templates...';
