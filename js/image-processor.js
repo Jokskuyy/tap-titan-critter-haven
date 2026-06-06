@@ -249,10 +249,27 @@ const ImageProcessor = (() => {
     const minMSE = Math.min(...candidates.map(c => c.mse));
     const mseRange = maxMSE - minMSE;
 
-    // Combined score: edge shape is primary, histogram secondary, MSE tiebreaker
+    // Adaptive weights: when shapes are similar (edge scores close),
+    // shift weight from edge → MSE for color/texture tiebreaking.
+    // e.g., Pet20 (light blue circle) vs Pet30 (dark blue circle)
+    const edgeScores = candidates.map(c => c.edgeScore);
+    const edgeSpread = Math.max(...edgeScores) - Math.min(...edgeScores);
+    
+    let wEdge, wHist, wMSE;
+    if (edgeSpread < 0.15) {
+      // Similar shapes → MSE decides (color/texture)
+      wEdge = 0.20; wHist = 0.30; wMSE = 0.50;
+    } else if (edgeSpread < 0.30) {
+      // Moderate shape difference → balanced
+      wEdge = 0.40; wHist = 0.25; wMSE = 0.35;
+    } else {
+      // Clear shape difference → edge decides
+      wEdge = 0.55; wHist = 0.25; wMSE = 0.20;
+    }
+
     for (const c of candidates) {
       const mseNorm = mseRange > 0 ? 1 - (c.mse - minMSE) / mseRange : 1;
-      c.combinedScore = 0.60 * c.edgeScore + 0.25 * c.histScore + 0.15 * mseNorm;
+      c.combinedScore = wEdge * c.edgeScore + wHist * c.histScore + wMSE * mseNorm;
     }
 
     // Pick best combined score
