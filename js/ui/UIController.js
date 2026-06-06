@@ -466,8 +466,57 @@ export class UIController {
   setupSolver() {
     $('btn-build-grid').addEventListener('click', () => this.buildManualGrid());
     $('btn-clear-grid').addEventListener('click', () => this.clearGrid());
+    $('btn-export-test').addEventListener('click', () => this.exportTestCase());
     $('btn-solve').addEventListener('click', () => this.startSolve());
     $('btn-abort').addEventListener('click', () => this.abortSolve());
+  }
+
+  exportTestCase() {
+    if (!this.state.cropImage) {
+      this.showStatus('No image to export.', 'warning');
+      return;
+    }
+    
+    const timestamp = Date.now();
+    const basename = `test_${timestamp}`;
+
+    // 1. Export JSON with template names instead of arbitrary IDs
+    const namedGrid = this.state.grid.map(row => 
+      row.map(id => id === 0 ? 'empty' : (this.state.activeTemplateMap[id]?.name || `Type ${id}`))
+    );
+
+    const data = {
+      rows: this.state.gridRows,
+      cols: this.state.gridCols,
+      grid: namedGrid // This is the corrected ground truth with names
+    };
+    
+    const jsonBlob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const jsonUrl = URL.createObjectURL(jsonBlob);
+    const aJson = document.createElement('a');
+    aJson.href = jsonUrl;
+    aJson.download = `${basename}.json`;
+    aJson.click();
+    URL.revokeObjectURL(jsonUrl);
+
+    // 2. Export cropped image
+    const rect = this.state.cropRect || { x: 0, y: 0, width: this.state.cropImage.width, height: this.state.cropImage.height };
+    const canvas = document.createElement('canvas');
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(this.state.cropImage, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
+    
+    canvas.toBlob((blob) => {
+      const imgUrl = URL.createObjectURL(blob);
+      const aImg = document.createElement('a');
+      aImg.href = imgUrl;
+      aImg.download = `${basename}.png`;
+      aImg.click();
+      URL.revokeObjectURL(imgUrl);
+    }, 'image/png');
+
+    this.showStatus('Exported test case (PNG and JSON).', 'success');
   }
 
   clearGrid() {

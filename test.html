@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Critter Haven - Detection Test Suite</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --text: #f8fafc;
+      --success: #10b981;
+      --error: #ef4444;
+      --card: #1e293b;
+    }
+    body {
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 2rem;
+    }
+    h1 { margin-top: 0; }
+    .card {
+      background: var(--card);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .test-result { margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid #334155; }
+    .success { color: var(--success); font-weight: bold; }
+    .error { color: var(--error); font-weight: bold; }
+    .mismatch { background: rgba(239, 68, 68, 0.1); padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem; }
+    #summary { font-size: 1.25rem; font-weight: bold; margin-bottom: 2rem; }
+    button { background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #2563eb; }
+    .flex { display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem; }
+  </style>
+</head>
+<body>
+
+  <h1>Detection Accuracy Test Suite</h1>
+  
+  <div class="flex">
+    <input type="file" id="file-input" multiple accept=".png,.json" style="display: none;">
+    <button id="btn-load-files">Select Test Files (PNGs & JSONs)</button>
+    <button id="btn-run-tests" disabled>Run Tests</button>
+    <div id="summary">Ready to load files.</div>
+  </div>
+
+  <div class="card" id="results-container">
+    <div id="logs"></div>
+  </div>
+
+  <script src="js/grid-engine.js"></script>
+  <script src="js/grid-detector.js"></script>
+  <script src="js/image-processor.js"></script>
+  <script type="module" src="js/test-runner.js"></script>
+</body>
+</html>
