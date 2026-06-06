@@ -1,0 +1,86 @@
+{
+  "rows": 8,
+  "cols": 8,
+  "grid": [
+    [
+      "CandyCane",
+      "empty",
+      "Pet 4",
+      "empty",
+      "Pet 4",
+      "Pet 15",
+      "Rambutan",
+      "Pear"
+    ],
+    [
+      "Grape",
+      "empty",
+      "Leaf",
+      "empty",
+      "Cherry",
+      "Rambutan",
+      "Grape",
+      "Leaf"
+    ],
+    [
+      "Rambutan",
+      "Pet 20",
+      "Leaf",
+      "Grape",
+      "Pet 15",
+      "CandyCane",
+      "HoneyComb",
+      "Pet 4"
+    ],
+    [
+      "CandyCane",
+      "Rambutan",
+      "Rambutan",
+      "Rambutan",
+      "HoneyComb",
+      "CatFood",
+      "Cherry",
+      "Leaf"
+    ],
+    [
+      "Grape",
+      "Pet 20",
+      "HoneyComb",
+      "Grape",
+      "Pet 20",
+      "Pet 4",
+      "Pepper",
+      "CatFood"
+    ],
+    [
+      "Leaf",
+      "Pear",
+      "Grape",
+      "Pear",
+      "Pet 15",
+      "Rambutan",
+      "Pet 4",
+      "Pet 20"
+    ],
+    [
+      "CandyCane",
+      "HoneyComb",
+      "Grape",
+      "HoneyComb",
+      "CandyCane",
+      "Cherry",
+      "Grape",
+      "Rambutan"
+    ],
+    [
+      "Rambutan",
+      "Pet 4",
+      "Pepper",
+      "Grape",
+      "CatFood",
+      "CatFood",
+      "Beet",
+      "Grape"
+    ]
+  ]
+}

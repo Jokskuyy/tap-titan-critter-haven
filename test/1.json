@@ -1,0 +1,86 @@
+{
+  "rows": 8,
+  "cols": 8,
+  "grid": [
+    [
+      "EyeGlass",
+      "Beet",
+      "HoneyComb",
+      "Emerald",
+      "Pet 20",
+      "Pet 20",
+      "Starfish",
+      "Emerald"
+    ],
+    [
+      "BowTie",
+      "Pet 15",
+      "Pet 30",
+      "BowTie",
+      "Pear",
+      "Pepper",
+      "Emerald",
+      "Pear"
+    ],
+    [
+      "HoneyComb",
+      "Mushroom",
+      "Pet 21",
+      "HoneyComb",
+      "Pet 21",
+      "Pet 15",
+      "Mushroom",
+      "Pear"
+    ],
+    [
+      "Emerald",
+      "Pepper",
+      "Beet",
+      "EyeGlass",
+      "Pet 30",
+      "EyeGlass",
+      "CatFood",
+      "HoneyComb"
+    ],
+    [
+      "Pet 21",
+      "Pet 21",
+      "Mushroom",
+      "Starfish",
+      "EyeGlass",
+      "CatFood",
+      "Pear",
+      "HoneyComb"
+    ],
+    [
+      "Pepper",
+      "Pet 20",
+      "BowTie",
+      "CatFood",
+      "Emerald",
+      "Walnut",
+      "Pet 21",
+      "Pet 15"
+    ],
+    [
+      "Emerald",
+      "Pear",
+      "Walnut",
+      "Starfish",
+      "Leaf",
+      "Pet 20",
+      "CatFood",
+      "Leaf"
+    ],
+    [
+      "BowTie",
+      "Pear",
+      "Pet 30",
+      "Pepper",
+      "Beet",
+      "Pear",
+      "Pet 20",
+      "EyeGlass"
+    ]
+  ]
+}
